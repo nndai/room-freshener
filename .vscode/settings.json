@@ -58,5 +58,6 @@
         "cinttypes": "cpp",
         "typeinfo": "cpp",
         "variant": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "C:/Users/daila/Documents/PlatformIO/Projects/Room Freshener/lib/ArduinoJson/extras/tests/IntegrationTests"
 }
