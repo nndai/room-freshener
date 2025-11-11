@@ -11,7 +11,7 @@
 
 
 /**
- * Cấu trúc một lịch phun (task).
+ * @brief Cấu trúc một lịch phun (task).
  */
 struct SprayTask {
     uint8_t id;         // ID duy nhất
@@ -33,12 +33,17 @@ private:
     uint8_t lastMinute = 255;
 
 public:
+    /**
+     * @brief Khởi tạo SprayScheduler.
+     * @param sc Con trỏ đến đối tượng SprayController.
+     * @param rtcModule Con trỏ đến đối tượng RTC_DS1307.
+     */
     SprayScheduler(SprayController* sc, RTC_DS1307* rtcModule)
         : spray(sc), rtc(rtcModule), triggered(256, false) {
     }
 
     /**
-     * Thêm hoặc chỉnh sửa một lịch phun.
+     * @brief Thêm hoặc chỉnh sửa một lịch phun.
      * @param id ID của lịch phun (0 để thêm mới).
      * @param hour Giờ phun.
      * @param minute Phút phun.
@@ -69,7 +74,7 @@ public:
     }
 
     /**
-     * Xóa một lịch phun theo ID.
+     * @brief Xóa một lịch phun theo ID.
      * @param id ID của lịch phun cần xóa.
      * @return true nếu xóa thành công, false nếu không tìm thấy.
      */
@@ -85,7 +90,7 @@ public:
     }
 
     /**
-     * Chỉnh sửa một lịch phun.
+     * @brief Chỉnh sửa một lịch phun.
      * @param newTask Cấu trúc lịch phun mới.
      * @return true nếu chỉnh sửa thành công, false nếu không tìm thấy.
      */
@@ -100,7 +105,7 @@ public:
     }
 
     /**
-     * Lấy ID tiếp theo chưa sử dụng.
+     * @brief Lấy ID tiếp theo chưa sử dụng.
      * @return ID tiếp theo (1-254), hoặc 255 nếu đầy.
      */
     uint8_t getNextTaskId() const {
@@ -120,7 +125,7 @@ public:
     }
 
     /**
-     * Lưu danh sách lịch phun vào file.
+     * @brief Lưu danh sách lịch phun vào file.
      * @param filename Tên file để lưu.
      * @return true nếu lưu thành công, false nếu thất bại.
      */
@@ -140,7 +145,7 @@ public:
     }
 
     /**
-     * Tải danh sách lịch phun từ file.
+     * @brief Tải danh sách lịch phun từ file.
      * @param filename Tên file để tải.
      * @return true nếu tải thành công, false nếu thất bại.
      */
@@ -170,8 +175,8 @@ public:
     }
 
     /**
-     * Cập nhật trạng thái lịch phun.
-     * Phải được gọi liên tục trong vòng lặp chính.
+     * @brief Cập nhật trạng thái lịch phun.
+     * @note Phải được gọi liên tục trong vòng lặp chính.
      */
     void update() {
         if (!rtc->isrunning()) return;
@@ -197,7 +202,7 @@ public:
     }
 
     /**
-     * Lấy con trỏ đến lịch phun theo ID.
+     * @brief Lấy con trỏ đến lịch phun theo ID.
      * @param id ID của lịch phun.
      * @return Con trỏ đến lịch phun, hoặc nullptr nếu không tìm thấy.
      */
@@ -208,7 +213,7 @@ public:
     }
 
     /**
-     * Tạo chuỗi JSON từ danh sách lịch phun.
+     * @brief Tạo chuỗi JSON từ danh sách lịch phun.
      * @return Chuỗi JSON đại diện cho danh sách lịch phun.
      */
     String createTasksJson() {
@@ -239,7 +244,7 @@ public:
     }
 
     /**
-     * Phân tích chuỗi JSON để lấy danh sách lịch phun.
+     * @brief Phân tích chuỗi JSON để lấy danh sách lịch phun.
      * @param jsonStr Chuỗi JSON chứa danh sách lịch phun.
      * @param outTasks Tham chiếu đến vector để lưu danh sách lịch phun.
      * @return true nếu phân tích thành công, false nếu thất bại.
