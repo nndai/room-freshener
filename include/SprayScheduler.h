@@ -17,9 +17,9 @@ struct SprayTask {
     uint8_t id;         // ID duy nhất
     uint8_t hour;       // giờ
     uint8_t minute;     // phút
-    uint8_t weekday;    // 0=Sun ... 6=Sat, 7=Everyday
+    uint8_t weekday;    // bit 0-6: CN-T7, weekday > 127 => lỗi
     bool enabled;       // có bật hay không
-    uint16_t duration;  // thời gian phun (ms)  
+    uint32_t duration;  // thời gian phun (ms)  
 };
 
 class SprayScheduler {
@@ -43,20 +43,38 @@ public:
     }
 
     /**
+     * @brief Kiểm tra tính hợp lệ của một lịch phun.
+     * @param hour Giờ phun.
+     * @param minute Phút phun.
+     * @param weekday Ngày trong tuần (theo bitmask).
+     * @param duration Thời gian phun (ms).
+     * @return true nếu hợp lệ, false nếu không.
+     */
+    bool checkValidTask(uint8_t hour, uint8_t minute, uint8_t weekday, uint32_t duration) {
+        if (hour > 23 || minute > 59 || weekday > 127 || duration == 0) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * @brief Thêm hoặc chỉnh sửa một lịch phun.
      * @param id ID của lịch phun (0 để thêm mới).
      * @param hour Giờ phun.
      * @param minute Phút phun.
-     * @param weekday Ngày trong tuần (0=Chủ nhật ... 6=Thứ Bảy, 7=Mỗi ngày).
+     * @param weekday Ngày trong tuần (theo bitmask).
      * @param duration Thời gian phun (ms).
      * @param enabled Có bật lịch phun hay không.
      * @return ID của lịch phun mới hoặc đã chỉnh sửa, hoặc 0 nếu thất bại.
      */
-    uint8_t addTask(uint8_t id, uint8_t hour, uint8_t minute, uint8_t weekday, uint16_t duration, bool enabled = true) {
+    uint8_t addTask(uint8_t id, uint8_t hour, uint8_t minute, uint8_t weekday, uint32_t duration, bool enabled = true) {
+        if (!checkValidTask(hour, minute, weekday, duration)) {
+            return 0;
+        }
         if (id == 0) {
             id = getNextTaskId();
             if(id == 255) {
-                return 0; // full
+                return 255; // full
             }
 
             SprayTask task = { id, hour, minute, weekday, enabled, duration };
@@ -78,7 +96,7 @@ public:
      * @param id ID của lịch phun cần xóa.
      * @return true nếu xóa thành công, false nếu không tìm thấy.
      */
-    bool removeTask(uint32_t id) {
+    bool removeTask(uint8_t id) {
         for (size_t i = 0; i < tasks.size(); ++i) {
             if (tasks[i].id == id) {
                 tasks.erase(tasks.begin() + i);
@@ -100,6 +118,21 @@ public:
                 t = newTask;
                 return true;
             }
+        }
+        return false;
+    }
+
+    /**
+     * @brief Đặt trạng thái kích hoạt của một lịch phun.
+     * @param id ID của lịch phun.
+     * @param enabled Trạng thái kích hoạt mới.
+     * @return true nếu thành công, false nếu không tìm thấy lịch phun.
+     */
+    bool setTaskEnabled(uint8_t id, bool enabled) {
+        SprayTask* task = getTaskById(id);
+        if (task) {
+            task->enabled = enabled;
+            return true;
         }
         return false;
     }
@@ -191,7 +224,7 @@ public:
             SprayTask& t = tasks[i];
             if (!t.enabled) continue;
 
-            bool dayMatch = (t.weekday == 7 || t.weekday == now.dayOfTheWeek());
+            bool dayMatch = t.weekday & (1 << now.dayOfTheWeek());
             bool timeMatch = (t.hour == now.hour() && t.minute == now.minute());
 
             if (timeMatch && dayMatch && !triggered[t.id]) {
@@ -206,7 +239,7 @@ public:
      * @param id ID của lịch phun.
      * @return Con trỏ đến lịch phun, hoặc nullptr nếu không tìm thấy.
      */
-    SprayTask* getTaskById(uint32_t id) {
+    SprayTask* getTaskById(uint8_t id) {
         for (auto& t : tasks)
             if (t.id == id) return &t;
         return nullptr;
@@ -214,12 +247,17 @@ public:
 
     /**
      * @brief Tạo chuỗi JSON từ danh sách lịch phun.
-     * @return Chuỗi JSON đại diện cho danh sách lịch phun.
+     * @return JSON đại diện cho danh sách lịch phun.
+     * example JSON:
+     * {
+     *   "countask": 2,
+     *   "sizeTask": 12,
+     *   "dataTask": "***BASE64_ENCODED_DATA_HERE***"
+     * }
      */
-    String createTasksJson() {
+    JsonDocument createTasksJson() {
         JsonDocument doc;
-
-        doc["countTask"] = tasks.size();
+        doc["countask"] = tasks.size();
         doc["sizeTask"] = sizeof(SprayTask);
 
         if (!tasks.empty()) {
@@ -238,9 +276,7 @@ public:
             doc["dataTask"] = "";
         }
 
-        String jsonStr;
-        serializeJson(doc, jsonStr);
-        return jsonStr;
+        return doc;
     }
 
     /**
