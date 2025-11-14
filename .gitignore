@@ -3,7 +3,20 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+.vscode/setting
+
 
 lib/**
 !lib/*/
 !lib/*/library.properties
+
+
+/app-android/.idea/
+/app-android/*.iml
+/app-android/.gradle/
+/app-android/build/
+/app-android/local.properties
+/app-android/.DS_Store
+/app-android/captures/
+/app-android/.externalNativeBuild/
+/app-android/.cxx/
