@@ -26,7 +26,7 @@ public:
      * Bật máy phun sương trong một khoảng thời gian nhất định.
      * @param durationMs Thời gian phun sương tính bằng mili giây.
      */
-    void on(uint16_t durationMs) {
+    void on(uint32_t durationMs) {
         _durationMs = durationMs;
         _active = true;
         _startTime = millis();
