@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -17,7 +18,8 @@ import com.shawnlin.numberpicker.NumberPicker
 class EditTaskDialog(
     private val activity: FragmentActivity,
     private val task: TaskItem?,
-    private val onSave: (TaskItem) -> Unit
+    private val onSave: (TaskItem) -> Unit,
+    private val onDelete: ((TaskItem) -> Unit)? = null
 ) {
 
     private val view = LayoutInflater.from(activity).inflate(R.layout.dialog_edit_task, null, false)
@@ -26,6 +28,7 @@ class EditTaskDialog(
     private val hourPicker: NumberPicker = view.findViewById(R.id.number_picker_hour)
     private val minutePicker: NumberPicker = view.findViewById(R.id.number_picker_minute)
     private val durationInput: TextInputEditText = view.findViewById(R.id.inputNumber)
+    private val deleteButton: MaterialButton = view.findViewById(R.id.btnDelete)
 
     private val daysHolder: LinearLayout = view.findViewById(R.id.task_days_holder)
     private val dayLetters = activity.resources.getStringArray(R.array.task_day_letters).toList()
@@ -48,6 +51,15 @@ class EditTaskDialog(
             )
             onSave(updated)
             dialog.dismiss()
+        }
+        deleteButton.apply {
+            isVisible = task != null
+            setOnClickListener {
+                task?.let {
+                    onDelete?.invoke(it)
+                    dialog.dismiss()
+                }
+            }
         }
     }
 

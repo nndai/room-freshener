@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_margin="20dp"
+    android:layout_marginHorizontal="40dp"
     android:paddingTop="20dp"
     android:paddingStart="20dp"
     android:paddingEnd="20dp"
@@ -32,21 +32,20 @@
                 android:layout_gravity="center"
                 android:contentDescription="Chọn giờ phun"
                 app:np_dividerColor="@android:color/transparent"
-
                 app:np_max="23"
                 app:np_min="0"
                 app:np_selectedTextSize="40dp"
-                app:np_textColor="@color/black"
+                app:np_textColor="#BDBDBD"
+                app:np_selectedTextColor="@color/black"
                 app:np_textSize="35dp"
                 app:np_wheelItemCount="3" />
 
             <View
                 android:layout_width="1dp"
                 android:layout_height="150dp"
-                android:layout_marginStart="30dp"
+                android:layout_marginStart="40dp"
                 android:layout_marginTop="25dp"
-                android:layout_marginEnd="30dp"
-
+                android:layout_marginEnd="40dp"
                 android:background="#cccccc" />
 
             <com.shawnlin.numberpicker.NumberPicker
@@ -59,7 +58,8 @@
                 app:np_max="59"
                 app:np_min="0"
                 app:np_selectedTextSize="40dp"
-                app:np_textColor="@color/black"
+                app:np_textColor="#BDBDBD"
+                app:np_selectedTextColor="@color/black"
                 app:np_textSize="35dp"
                 app:np_wheelItemCount="3" />
 
@@ -84,7 +84,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:hint="Thời gian xịt">
+            android:hint="Thời gian xịt (giây)">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/inputNumber"
@@ -104,11 +104,26 @@
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDelete"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Xóa"
+                android:visibility="gone"
+                android:textColor="#FF5890" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnCancel"
                 style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Huỷ" />
+                android:text="Huỷ"
+                android:textColorLink="#200059" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSave"
@@ -116,7 +131,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
 
-                android:text="Lưu" />
+                android:text="Lưu"
+                app:backgroundTint="#11568A" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

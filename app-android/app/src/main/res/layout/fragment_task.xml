@@ -30,6 +30,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
+            android:layout_marginBottom="10dp"
             android:text="Tạo và quản lý các lần xịt theo ngày, giờ mong muốn."
             android:textColor="#5F6368"
             android:textSize="14sp"

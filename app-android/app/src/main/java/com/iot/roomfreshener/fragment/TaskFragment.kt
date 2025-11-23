@@ -64,17 +64,29 @@ class TaskFragment : Fragment() {
     }
 
     private fun showTaskDialog(task: TaskItem?) {
-        EditTaskDialog(requireActivity(), task) { updated ->
-            val index = tasks.indexOfFirst { it.id == updated.id }
-            if (index == -1) {
-                tasks.add(updated)
-                adapter.notifyItemInserted(tasks.lastIndex)
-            } else {
-                tasks[index] = updated
-                adapter.notifyItemChanged(index)
+        EditTaskDialog(
+            requireActivity(),
+            task,
+            onSave = { updated ->
+                val index = tasks.indexOfFirst { it.id == updated.id }
+                if (index == -1) {
+                    tasks.add(updated)
+                    adapter.notifyItemInserted(tasks.lastIndex)
+                } else {
+                    tasks[index] = updated
+                    adapter.notifyItemChanged(index)
+                }
+                updatePlaceholder()
+            },
+            onDelete = { deleted ->
+                val index = tasks.indexOfFirst { it.id == deleted.id }
+                if (index != -1) {
+                    tasks.removeAt(index)
+                    adapter.notifyItemRemoved(index)
+                    updatePlaceholder()
+                }
             }
-            updatePlaceholder()
-        }.show()
+        ).show()
     }
 
     private fun updatePlaceholder() {
