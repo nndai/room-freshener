@@ -7,36 +7,28 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
 import com.iot.roomfreshener.R
 import com.iot.roomfreshener.adapter.TaskAdapter
 import com.iot.roomfreshener.adapter.TaskItem
 import com.iot.roomfreshener.dialogs.EditTaskDialog
+import com.iot.roomfreshener.ui.task.TaskUiEvent
+import com.iot.roomfreshener.ui.task.TaskViewModel
+import kotlinx.coroutines.launch
 
 class TaskFragment : Fragment() {
 
-    private val tasks = mutableListOf(
-        TaskItem(
-            id = 1,
-            hour = 7,
-            minute = 0,
-            durationSeconds = 30,
-            repeatDays = listOf("T2", "T4", "T6"),
-            enabled = true
-        ),
-        TaskItem(
-            id = 2,
-            hour = 20,
-            minute = 30,
-            durationSeconds = 45,
-            repeatDays = listOf("T3", "T5"),
-            enabled = false
-        )
-    )
+    private val viewModel: TaskViewModel by viewModels()
 
     private lateinit var adapter: TaskAdapter
     private lateinit var placeholder: TextView
+    private var emptyMessage: CharSequence = ""
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -48,49 +40,62 @@ class TaskFragment : Fragment() {
         val recycler = view.findViewById<RecyclerView>(R.id.task_list)
         val fab = view.findViewById<FloatingActionButton>(R.id.task_fab)
         placeholder = view.findViewById(R.id.task_placeholder)
+        emptyMessage = placeholder.text
 
         adapter = TaskAdapter(
-            items = tasks,
             onItemClick = { showTaskDialog(it) },
-            onToggle = { item, enabled ->
-                item.enabled = enabled
-                adapter.notifyItemChanged(tasks.indexOf(item))
-            }
+            onToggle = { item, enabled -> viewModel.toggleTask(item, enabled) }
         )
         recycler.adapter = adapter
-        updatePlaceholder()
 
         fab.setOnClickListener { showTaskDialog(null) }
+
+        collectUiState()
+        collectEvents()
+    }
+
+    private fun collectUiState() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    adapter.submitList(state.items)
+                    if (state.items.isEmpty() && state.isLoading) {
+                        placeholder.text = getString(R.string.task_loading_placeholder)
+                        placeholder.isVisible = true
+                    } else {
+                        placeholder.text = emptyMessage
+                        placeholder.isVisible = state.items.isEmpty()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun collectEvents() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.events.collect { event ->
+                    when (event) {
+                        is TaskUiEvent.ShowMessage -> showSnackbar(event.message)
+                    }
+                }
+            }
+        }
     }
 
     private fun showTaskDialog(task: TaskItem?) {
         EditTaskDialog(
             requireActivity(),
             task,
-            onSave = { updated ->
-                val index = tasks.indexOfFirst { it.id == updated.id }
-                if (index == -1) {
-                    tasks.add(updated)
-                    adapter.notifyItemInserted(tasks.lastIndex)
-                } else {
-                    tasks[index] = updated
-                    adapter.notifyItemChanged(index)
-                }
-                updatePlaceholder()
-            },
-            onDelete = { deleted ->
-                val index = tasks.indexOfFirst { it.id == deleted.id }
-                if (index != -1) {
-                    tasks.removeAt(index)
-                    adapter.notifyItemRemoved(index)
-                    updatePlaceholder()
-                }
-            }
+            onSave = { updated -> viewModel.saveTask(updated) },
+            onDelete = { deleted -> viewModel.deleteTask(deleted) }
         ).show()
     }
 
-    private fun updatePlaceholder() {
-        placeholder.isVisible = tasks.isEmpty()
+    private fun showSnackbar(message: String) {
+        view?.let { root ->
+            Snackbar.make(root, message, Snackbar.LENGTH_LONG).show()
+        }
     }
 
     companion object {

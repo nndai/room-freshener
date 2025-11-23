@@ -19,10 +19,11 @@ data class TaskItem(
 )
 
 class TaskAdapter(
-    private val items: MutableList<TaskItem>,
     private val onItemClick: (TaskItem) -> Unit,
     private val onToggle: (TaskItem, Boolean) -> Unit
 ) : RecyclerView.Adapter<TaskAdapter.TaskViewHolder>() {
+
+    private val items = mutableListOf<TaskItem>()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TaskViewHolder =
         TaskViewHolder(
@@ -35,6 +36,12 @@ class TaskAdapter(
     }
 
     override fun getItemCount(): Int = items.size
+
+    fun submitList(newItems: List<TaskItem>) {
+        items.clear()
+        items.addAll(newItems)
+        notifyDataSetChanged()
+    }
 
     inner class TaskViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val time: TextView = view.findViewById(R.id.task_time)

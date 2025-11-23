@@ -60,7 +60,7 @@
             android:alpha="0.85"
             android:gravity="center"
             android:padding="24dp"
-            android:text="Chưa có nhiệm vụ nào.\nNhấn nút + để tạo lịch xịt đầu tiên."
+            android:text="@string/task_empty_placeholder"
             android:textColor="#9AA0A6"
             android:textSize="16sp"
             android:textStyle="italic"

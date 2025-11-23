@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Room Freshener</string>
+    <string name="task_empty_placeholder">Chưa có nhiệm vụ nào.
+        Nhấn nút + để tạo lịch xịt đầu tiên.</string>
+    <string name="task_loading_placeholder">Đang tải danh sách lịch phun...</string>
 </resources>

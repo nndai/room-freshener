@@ -42,7 +42,7 @@ class EditTaskDialog(
         view.findViewById<MaterialButton>(R.id.btnCancel).setOnClickListener { dialog.dismiss() }
         view.findViewById<MaterialButton>(R.id.btnSave).setOnClickListener {
             val updated = TaskItem(
-                id = task?.id ?: System.currentTimeMillis(),
+                id = task?.id ?: 0L,
                 hour = hourPicker.value,
                 minute = minutePicker.value,
                 durationSeconds = durationInput.text?.toString()?.toIntOrNull()?.takeIf { it > 0 } ?: 30,
