@@ -21,19 +21,30 @@ enum SprayReason {
  * Class điều khiển máy phun sương.
  */
 class SprayController {
+public:
+    struct SprayDataTotal {
+        uint32_t totalSpraysCount;
+        uint32_t totalSprayDuration; // in seconds
+    };
+
+private:
     static constexpr uint8_t MAX_LOG_FILES = 6;
     uint8_t _pin;
     bool _active = false;
     uint32_t _durationMs = 0;
     uint32_t _startTime = 0;
     RTC_DS1307* _rtc = nullptr;
-    String _folderLog = FOLDER_SPRAY_LOG;
+    String _pathFolderLog = "";
+    String _pathFileNameSprayTotal = "";
 
+    
     struct LogFileInfo {
         String path;
         uint16_t year = 0;
         uint8_t month = 0;
     };
+
+    SprayDataTotal _sprayDataTotal;
 
     void logSprayEvent(uint32_t durationMs, SprayReason reason, const DateTime* timestamp);
     bool resolveTimestamp(const DateTime* timestamp, DateTime& outTimestamp) const;
@@ -53,9 +64,10 @@ public:
      * Khởi tạo máy phun sương với chân điều khiển cụ thể.
      * @param pin Chân điều khiển máy phun sương.
      */
-    SprayController(uint8_t pin, RTC_DS1307* rtc = nullptr, String logFolder = FOLDER_SPRAY_LOG)
+    SprayController(uint8_t pin, RTC_DS1307* rtc = nullptr, String pathFolderLog = "/logs/spray/", String pathFileNameSprayTotal="/datas/sprayDataTotal.bin")
         : _pin(pin), _rtc(rtc) {
-        _folderLog = normalizeFolderPath(logFolder);
+        _pathFolderLog = normalizeFolderPath(pathFolderLog);
+        _pathFileNameSprayTotal = pathFileNameSprayTotal;
         pinMode(_pin, OUTPUT);
         digitalWrite(_pin, LOW);
     }
@@ -64,8 +76,8 @@ public:
         _rtc = rtc;
     }
 
-    void setLogFolder(const String& logFolder) {
-        _folderLog = normalizeFolderPath(logFolder);
+    void setLogFolder(const String& pathFolderLog) {
+        _pathFolderLog = normalizeFolderPath(pathFolderLog);
     }
 
     /**
@@ -77,6 +89,7 @@ public:
         _active = true;
         _startTime = millis();
         digitalWrite(_pin, HIGH);
+        incrementSprayData(durationMs / 1000);
         logSprayEvent(durationMs, reason, timestamp);
     }
 
@@ -106,7 +119,48 @@ public:
         }
     }
 
+private:
+    void loadSprayDataTotal() {
+        File file = LittleFS.open(_pathFileNameSprayTotal.c_str(), "r");
+        if (!file) {
+            Serial.println("No spray data total file found. Using default values.");
+            return;
+        }
 
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, file);
+        if (error) {
+            Serial.print(F("Failed to read spray data total file: "));
+            Serial.println(error.f_str());
+            file.close();
+            return;
+        }
+
+        _sprayDataTotal.totalSpraysCount = doc["totalSpraysCount"] | 0;
+        _sprayDataTotal.totalSprayDuration = doc["totalSprayDuration"] | 0;
+
+        file.close();
+    }
+
+    void saveSprayDataTotal() {
+        JsonDocument doc;
+        doc["totalSpraysCount"] = _sprayDataTotal.totalSpraysCount;
+        doc["totalSprayDuration"] = _sprayDataTotal.totalSprayDuration;
+        File file = LittleFS.open(_pathFileNameSprayTotal.c_str(), "w");
+        serializeJson(doc, file);
+        file.close();
+    }
+
+    void incrementSprayData(uint32_t durationSeconds) {
+        _sprayDataTotal.totalSpraysCount += 1;
+        _sprayDataTotal.totalSprayDuration += durationSeconds;
+        saveSprayDataTotal();
+    }
+
+public:
+    SprayDataTotal getSprayDataTotal() {
+        return _sprayDataTotal;
+    }
 };
 
 inline void SprayController::logSprayEvent(uint32_t durationMs, SprayReason reason, const DateTime* timestamp) {
@@ -173,10 +227,10 @@ inline String SprayController::normalizeFolderPath(const String& folder) const {
 }
 
 inline String SprayController::logDirWithSlash() const {
-    if (_folderLog.length() == 0) {
+    if (_pathFolderLog.length() == 0) {
         return "/";
     }
-    return _folderLog;
+    return _pathFolderLog;
 }
 
 inline String SprayController::logDirWithoutSlash() const {
