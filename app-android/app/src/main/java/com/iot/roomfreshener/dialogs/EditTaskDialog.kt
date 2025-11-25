@@ -37,6 +37,8 @@ class EditTaskDialog(
         ?.toMutableSet() ?: mutableSetOf()
 
     init {
+        hourPicker.setFormatter { i -> String.format("%02d", i) }
+        minutePicker.setFormatter { i -> String.format("%02d", i) }
         setupInitialValues()
         inflateDayViews()
         view.findViewById<MaterialButton>(R.id.btnCancel).setOnClickListener { dialog.dismiss() }

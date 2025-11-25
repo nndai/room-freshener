@@ -1,11 +1,12 @@
 package com.iot.roomfreshener.data.repository
 
+import com.iot.roomfreshener.data.model.HomeSnapshot
 import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskWriteRequest
-import com.iot.roomfreshener.data.remote.EspWebSocketClient
+import com.iot.roomfreshener.data.remote.DeviceChannel
+import com.iot.roomfreshener.data.remote.DeviceConnectionState
 import com.iot.roomfreshener.data.remote.TaskRemoteDataSource
 import com.iot.roomfreshener.data.remote.TaskRemoteEvent
-import com.iot.roomfreshener.data.remote.WebSocketState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -17,14 +18,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+/**
+ * Repository gom tất cả luồng dữ liệu nhiệm vụ phun.
+ * Nhiệm vụ chính: khởi động kênh kết nối, phát snapshot về UI,
+ * relay sự kiện thành công/thất bại và cung cấp API thao tác.
+ */
 class TaskRepository(
     private val remote: TaskRemoteDataSource,
-    private val socketClient: EspWebSocketClient,
+    private val deviceChannel: DeviceChannel,
     private val scope: CoroutineScope
 ) {
 
     private val _tasks = MutableStateFlow<List<Task>>(emptyList())
     val tasks: StateFlow<List<Task>> = _tasks.asStateFlow()
+
+    private val _homeSnapshot = MutableStateFlow<HomeSnapshot?>(null)
+    val homeSnapshot: StateFlow<HomeSnapshot?> = _homeSnapshot.asStateFlow()
 
     private val _commandEvents = MutableSharedFlow<TaskRemoteEvent.CommandResult>(
         replay = 0,
@@ -33,14 +42,16 @@ class TaskRepository(
     )
     val commandEvents: SharedFlow<TaskRemoteEvent.CommandResult> = _commandEvents.asSharedFlow()
 
-    val connectionState: StateFlow<WebSocketState> = socketClient.state
+    val connectionState: StateFlow<DeviceConnectionState> = deviceChannel.state
 
     init {
-        socketClient.connect()
+        // Bắt đầu mở kết nối ngay khi repository được tạo
+        deviceChannel.start()
         scope.launch {
             remote.events.collectLatest { event ->
                 when (event) {
                     is TaskRemoteEvent.Snapshot -> _tasks.value = event.tasks
+                    is TaskRemoteEvent.Home -> _homeSnapshot.value = event.snapshot
                     is TaskRemoteEvent.CommandResult -> _commandEvents.emit(event)
                     is TaskRemoteEvent.Failure -> _commandEvents.emit(
                         TaskRemoteEvent.CommandResult(
@@ -54,9 +65,11 @@ class TaskRepository(
         }
 
         scope.launch {
+            // Mỗi lần kết nối thành công thì chủ động yêu cầu lại danh sách task
             connectionState.collectLatest { state ->
-                if (state is WebSocketState.Connected) {
+                if (state is DeviceConnectionState.Connected) {
                     refreshTasks()
+                    refreshHome()
                 }
             }
         }
@@ -86,7 +99,12 @@ class TaskRepository(
         remote.sprayNow(durationMs)
     }
 
+    suspend fun refreshHome() {
+        remote.requestHomeData()
+    }
+
     fun reconnect() {
-        socketClient.reconnect()
+        // Cho phép UI yêu cầu kết nối lại (sẽ khởi động lại Hybrid channel)
+        deviceChannel.restart()
     }
 }

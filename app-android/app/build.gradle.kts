@@ -1,7 +1,12 @@
+import com.android.build.gradle.internal.cxx.configure.gradleLocalProperties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
 }
+
+val localProps = gradleLocalProperties(rootDir, providers)
+val blynkToken = localProps.getProperty("BLYNK_TOKEN", "as")
 
 android {
     namespace = "com.iot.roomfreshener"
@@ -15,6 +20,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "BLYNK_TOKEN", "\"$blynkToken\"")
     }
 
     buildTypes {
@@ -32,6 +38,10 @@ android {
     }
     kotlinOptions {
         jvmTarget = "11"
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 }
 
