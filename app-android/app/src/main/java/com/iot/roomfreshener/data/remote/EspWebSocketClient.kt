@@ -18,67 +18,63 @@ import java.util.concurrent.TimeUnit
 class EspWebSocketClient(
     private val baseUrl: String,
     okHttpClient: OkHttpClient? = null
-) {
+) : DeviceChannel {
 
     private val client: OkHttpClient = okHttpClient ?: defaultOkHttpClient()
     private var socket: WebSocket? = null
+    private val channelKind = ChannelKind.WEBSOCKET
 
-    private val _state = MutableStateFlow<WebSocketState>(WebSocketState.Idle)
-    val state: StateFlow<WebSocketState> = _state.asStateFlow()
+    private val _state = MutableStateFlow<DeviceConnectionState>(DeviceConnectionState.Idle)
+    override val state: StateFlow<DeviceConnectionState> = _state.asStateFlow()
 
-    private val _messages = MutableSharedFlow<String>(
+    private val _incoming = MutableSharedFlow<String>(
         replay = 0,
         extraBufferCapacity = 64,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-    val messages: SharedFlow<String> = _messages.asSharedFlow()
+    override val incoming: SharedFlow<String> = _incoming.asSharedFlow()
 
     private val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            _state.value = WebSocketState.Connected(baseUrl)
+            _state.value = DeviceConnectionState.Connected(channelKind)
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
             socket = null
-            _state.value = WebSocketState.Disconnected(reason)
+            _state.value = DeviceConnectionState.Disconnected(channelKind, reason)
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             socket = null
-            _state.value = WebSocketState.Disconnected(reason)
+            _state.value = DeviceConnectionState.Disconnected(channelKind, reason)
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             socket = null
-            _state.value = WebSocketState.Failed(t)
+            _state.value = DeviceConnectionState.Failed(channelKind, t)
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            _messages.tryEmit(text)
+            _incoming.tryEmit(text)
         }
     }
 
-    fun connect() {
-        if (_state.value is WebSocketState.Connected || _state.value is WebSocketState.Connecting) {
+    override fun start() {
+        if (_state.value is DeviceConnectionState.Connected || _state.value is DeviceConnectionState.Connecting) {
             return
         }
-        _state.value = WebSocketState.Connecting
+        _state.value = DeviceConnectionState.Connecting(channelKind)
         val request = Request.Builder().url(baseUrl).build()
         socket = client.newWebSocket(request, listener)
     }
 
-    fun reconnect() {
-        disconnect("manual-reconnect")
-        connect()
-    }
-
-    fun disconnect(reason: String? = null) {
-        socket?.close(1000, reason ?: "client-disconnect")
+    override fun stop() {
+        socket?.close(1000, "client-disconnect")
         socket = null
-        _state.value = WebSocketState.Disconnected(reason)
+        _state.value = DeviceConnectionState.Disconnected(channelKind, "stopped")
     }
 
-    fun send(text: String): Boolean = socket?.send(text) ?: false
+    override suspend fun send(raw: String): Boolean = socket?.send(raw) ?: false
 
     private fun defaultOkHttpClient(): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {

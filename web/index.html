@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="vi">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Room Freshener - Lịch Phun Sương</title>
+        <style>
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 20px;
+            }
+
+            .container {
+                width: 100%;
+                max-width: 480px;
+                background: white;
+                border-radius: 24px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                height: 90vh;
+                max-height: 800px;
+            }
+
+            header {
+                background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+                color: white;
+                padding: 20px;
+                text-align: center;
+                font-size: 24px;
+                font-weight: 600;
+                box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
+            }
+
+            .tab-content {
+                flex: 1;
+                overflow-y: auto;
+                padding: 20px;
+            }
+
+            .tab-pane {
+                display: none;
+                animation: fadeIn 0.3s ease-in;
+            }
+
+            .tab-pane.active {
+                display: block;
+            }
+
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            /* Clock Tab */
+            .clock-display {
+                text-align: center;
+                padding: 40px 20px;
+            }
+
+            .time-display {
+                font-size: 72px;
+                font-weight: 700;
+                color: #00d4ff;
+                margin-bottom: 10px;
+                font-variant-numeric: tabular-nums;
+            }
+
+            .date-display {
+                font-size: 18px;
+                color: #999;
+                margin-bottom: 30px;
+            }
+
+            .weekday-display {
+                font-size: 16px;
+                color: #00d4ff;
+                font-weight: 600;
+            }
+
+            /* Alarm Tab */
+            .alarm-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+                padding-bottom: 15px;
+                border-bottom: 2px solid #f0f0f0;
+            }
+
+            .alarm-header h2 {
+                color: #333;
+                font-size: 20px;
+            }
+
+            .btn-add-alarm {
+                background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 20px;
+                cursor: pointer;
+                font-weight: 600;
+                font-size: 14px;
+                transition: transform 0.2s, box-shadow 0.2s;
+            }
+
+            .btn-add-alarm:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 16px rgba(0, 212, 255, 0.3);
+            }
+
+            .btn-add-alarm:active {
+                transform: translateY(0);
+            }
+
+            .alarm-list {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .alarm-item {
+                background: #f8f9ff;
+                border: 2px solid #e8e8ff;
+                border-radius: 16px;
+                padding: 16px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .alarm-item:hover {
+                background: #f0f2ff;
+                border-color: #00d4ff;
+                transform: translateX(4px);
+            }
+
+            .alarm-item.disabled {
+                opacity: 0.5;
+                background: #f5f5f5;
+            }
+
+            .alarm-time-info {
+                flex: 1;
+            }
+
+            .alarm-time {
+                font-size: 28px;
+                font-weight: 700;
+                color: #00d4ff;
+                font-variant-numeric: tabular-nums;
+                margin-bottom: 6px;
+            }
+
+            .alarm-days {
+                display: flex;
+                gap: 6px;
+                flex-wrap: wrap;
+            }
+
+            .day-badge {
+                display: inline-block;
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                background: white;
+                border: 2px solid #ddd;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                font-weight: 600;
+                color: #999;
+            }
+
+            .day-badge.active {
+                background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+                color: white;
+                border-color: transparent;
+            }
+
+            .alarm-duration {
+                font-size: 12px;
+                color: #999;
+                margin-top: 6px;
+            }
+
+            .alarm-toggle {
+                width: 56px;
+                height: 32px;
+                background: #ccc;
+                border: none;
+                border-radius: 16px;
+                cursor: pointer;
+                position: relative;
+                transition: background 0.3s;
+                padding: 0;
+            }
+
+            .alarm-toggle.active {
+                background: #00d4ff;
+            }
+
+            .alarm-toggle::after {
+                content: "";
+                position: absolute;
+                width: 28px;
+                height: 28px;
+                background: white;
+                border-radius: 50%;
+                top: 2px;
+                left: 2px;
+                transition: left 0.3s;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            }
+
+            .alarm-toggle.active::after {
+                left: 26px;
+            }
+
+            .alarm-delete {
+                width: 40px;
+                height: 40px;
+                background: #fff3e0;
+                border: none;
+                border-radius: 10px;
+                cursor: pointer;
+                font-size: 20px;
+                transition: all 0.2s;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .alarm-delete:hover {
+                background: #ffcdd2;
+            }
+
+            .empty-state {
+                text-align: center;
+                padding: 40px 20px;
+                color: #999;
+            }
+
+            .empty-state-icon {
+                font-size: 60px;
+                margin-bottom: 20px;
+            }
+
+            .empty-state-text {
+                font-size: 16px;
+            }
+
+            /* Time Picker Dialog */
+            .dialog-overlay {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 1000;
+                justify-content: center;
+                align-items: flex-end;
+            }
+
+            .dialog-overlay.active {
+                display: flex;
+            }
+
+            .dialog-content {
+                background: white;
+                border-radius: 24px 24px 0 0;
+                width: 100%;
+                max-width: 480px;
+                padding: 24px 20px;
+                max-height: 90vh;
+                overflow-y: auto;
+                animation: slideUp 0.3s ease-out;
+            }
+
+            @keyframes slideUp {
+                from {
+                    transform: translateY(100%);
+                }
+                to {
+                    transform: translateY(0);
+                }
+            }
+
+            .dialog-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 24px;
+                padding-bottom: 16px;
+                border-bottom: 2px solid #f0f0f0;
+            }
+
+            .dialog-header h2 {
+                color: #333;
+                font-size: 20px;
+            }
+
+            .dialog-close {
+                background: none;
+                border: none;
+                font-size: 24px;
+                cursor: pointer;
+                color: #999;
+                transition: color 0.2s;
+            }
+
+            .dialog-close:hover {
+                color: #333;
+            }
+
+            /* Time Picker */
+            .time-picker-section {
+                margin-bottom: 24px;
+            }
+
+            .time-picker-label {
+                font-size: 14px;
+                color: #666;
+                font-weight: 600;
+                margin-bottom: 12px;
+                display: block;
+            }
+
+            .time-picker-row {
+                display: flex;
+                gap: 12px;
+                justify-content: center;
+                align-items: center;
+            }
+
+            .time-input-group {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .time-input-btn {
+                width: 48px;
+                height: 40px;
+                background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 18px;
+                cursor: pointer;
+                transition: transform 0.1s;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .time-input-btn:active {
+                transform: scale(0.95);
+            }
+
+            .time-display-input {
+                width: 60px;
+                text-align: center;
+                font-size: 24px;
+                font-weight: 700;
+                color: #00d4ff;
+                background: #f0f2ff;
+                border: 2px solid #e8e8ff;
+                border-radius: 8px;
+                padding: 8px;
+                font-variant-numeric: tabular-nums;
+            }
+
+            .time-display-input:focus {
+                outline: none;
+                border-color: #00d4ff;
+                box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+            }
+
+            .time-separator {
+                font-size: 24px;
+                font-weight: 700;
+                color: #00d4ff;
+                margin: 20px 0;
+            }
+
+            /* Day Selector */
+            .day-selector {
+                display: grid;
+                grid-template-columns: repeat(7, 1fr);
+                gap: 8px;
+            }
+
+            .day-button {
+                aspect-ratio: 1;
+                border: 2px solid #ddd;
+                background: white;
+                border-radius: 12px;
+                cursor: pointer;
+                font-weight: 600;
+                font-size: 14px;
+                color: #999;
+                transition: all 0.2s;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .day-button:hover {
+                border-color: #00d4ff;
+                color: #00d4ff;
+            }
+
+            .day-button.active {
+                background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+                color: white;
+                border-color: transparent;
+            }
+
+            /* Duration Input */
+            .duration-input-group {
+                display: flex;
+                gap: 12px;
+                align-items: center;
+            }
+
+            .duration-input {
+                flex: 1;
+                padding: 12px 16px;
+                border: 2px solid #e8e8ff;
+                border-radius: 8px;
+                font-size: 14px;
+                transition: border-color 0.2s;
+            }
+
+            .duration-input:focus {
+                outline: none;
+                border-color: #00d4ff;
+                box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+            }
+
+            .duration-unit {
+                color: #666;
+                font-weight: 600;
+                font-size: 14px;
+            }
+
+            /* Dialog Buttons */
+            .dialog-buttons {
+                display: flex;
+                gap: 12px;
+                margin-top: 24px;
+            }
+
+            .btn-cancel {
+                flex: 1;
+                padding: 14px;
+                background: #f0f0f0;
+                border: none;
+                border-radius: 12px;
+                font-size: 16px;
+                font-weight: 600;
+                color: #333;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .btn-cancel:hover {
+                background: #e0e0e0;
+            }
+
+            .btn-save {
+                flex: 1;
+                padding: 14px;
+                background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+                border: none;
+                border-radius: 12px;
+                font-size: 16px;
+                font-weight: 600;
+                color: white;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .btn-save:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 16px rgba(0, 212, 255, 0.3);
+            }
+
+            .btn-save:active {
+                transform: translateY(0);
+            }
+
+            /* Tab Navigation */
+            .control-tabs {
+                background: white;
+                border-top: 2px solid #f0f0f0;
+                display: flex;
+                justify-content: space-around;
+                padding: 12px 0;
+            }
+
+            .tab-btn {
+                background: none;
+                border: none;
+                padding: 12px 16px;
+                cursor: pointer;
+                font-size: 24px;
+                color: #ccc;
+                transition: color 0.2s, transform 0.2s;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+            }
+
+            .tab-btn:hover {
+                color: #999;
+            }
+
+            .tab-btn.active {
+                color: #00d4ff;
+                transform: scale(1.1);
+            }
+
+            .tab-label {
+                font-size: 12px;
+                font-weight: 600;
+            }
+
+            @media (max-width: 480px) {
+                .container {
+                    max-height: 100vh;
+                    border-radius: 0;
+                }
+
+                header {
+                    font-size: 20px;
+                    padding: 16px;
+                }
+            }
+
+            ::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            ::-webkit-scrollbar-thumb {
+                background: #ddd;
+                border-radius: 3px;
+            }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #999;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>🌿 Room Freshener</header>
+
+            <div class="tab-content">
+                <!-- Clock Tab -->
+                <div class="tab-pane active" id="tab-clock">
+                    <div class="clock-display">
+                        <div class="time-display" id="time-display">14:30</div>
+                        <div class="date-display" id="date-display">Thứ Tư, 16 tháng 11</div>
+                        <div class="weekday-display" id="weekday-display">Đang hoạt động</div>
+                    </div>
+                </div>
+
+                <!-- Alarm Tab -->
+                <div class="tab-pane" id="tab-alarm">
+                    <div class="alarm-header">
+                        <h2>Lịch Phun Sương</h2>
+                        <button class="btn-add-alarm" onclick="openNewAlarmDialog()">+ Thêm</button>
+                    </div>
+                    <div class="alarm-list" id="alarm-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📭</div>
+                            <div class="empty-state-text">Chưa có lịch phun nào</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div class="tab-pane" id="tab-settings">
+                    <div style="text-align: center; padding: 40px 20px; color: #999">
+                        <div style="font-size: 60px; margin-bottom: 20px">⚙️</div>
+                        <div style="font-size: 16px">Cấu Hình</div>
+                        <div style="font-size: 14px; margin-top: 10px; color: #ccc">Đang phát triển</div>
+                    </div>
+                </div>
+
+                <!-- About Tab -->
+                <div class="tab-pane" id="tab-about">
+                    <div style="text-align: center; padding: 40px 20px; color: #999">
+                        <div style="font-size: 60px; margin-bottom: 20px">ℹ️</div>
+                        <div style="font-size: 16px">Thông Tin</div>
+                        <div style="font-size: 14px; margin-top: 10px; color: #ccc">v1.0.0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="control-tabs">
+                <button class="tab-btn active" data-tab="tab-clock" onclick="switchTab('tab-clock', this)">
+                    <span>🕐</span>
+                    <span class="tab-label">Đồng hồ</span>
+                </button>
+                <button class="tab-btn" data-tab="tab-alarm" onclick="switchTab('tab-alarm', this)">
+                    <span>⏰</span>
+                    <span class="tab-label">Lịch</span>
+                </button>
+                <button class="tab-btn" data-tab="tab-settings" onclick="switchTab('tab-settings', this)">
+                    <span>⚙️</span>
+                    <span class="tab-label">Cấu hình</span>
+                </button>
+                <button class="tab-btn" data-tab="tab-about" onclick="switchTab('tab-about', this)">
+                    <span>ℹ️</span>
+                    <span class="tab-label">Thông tin</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Time Picker Dialog -->
+        <div class="dialog-overlay" id="dialog-overlay">
+            <div class="dialog-content">
+                <div class="dialog-header">
+                    <h2 id="dialog-title">Thêm Lịch Phun Sương</h2>
+                    <button class="dialog-close" onclick="closeDialog()">✕</button>
+                </div>
+
+                <!-- Time Picker -->
+                <div class="time-picker-section">
+                    <label class="time-picker-label">Chọn Giờ Phun</label>
+                    <div style="text-align: center">
+                        <div class="time-picker-row">
+                            <div class="time-input-group">
+                                <button class="time-input-btn" onclick="incrementHour()">▲</button>
+                                <input type="text" class="time-display-input" id="hour-input" value="14" maxlength="2" />
+                                <button class="time-input-btn" onclick="decrementHour()">▼</button>
+                            </div>
+                            <div class="time-separator">:</div>
+                            <div class="time-input-group">
+                                <button class="time-input-btn" onclick="incrementMinute()">▲</button>
+                                <input type="text" class="time-display-input" id="minute-input" value="30" maxlength="2" />
+                                <button class="time-input-btn" onclick="decrementMinute()">▼</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Day Selector -->
+                <div class="time-picker-section">
+                    <label class="time-picker-label">Chọn Ngày Trong Tuần</label>
+                    <div class="day-selector" id="day-selector">
+                        <button class="day-button" data-day="0" onclick="toggleDay(0)">CN</button>
+                        <button class="day-button" data-day="1" onclick="toggleDay(1)">T2</button>
+                        <button class="day-button" data-day="2" onclick="toggleDay(2)">T3</button>
+                        <button class="day-button" data-day="3" onclick="toggleDay(3)">T4</button>
+                        <button class="day-button" data-day="4" onclick="toggleDay(4)">T5</button>
+                        <button class="day-button" data-day="5" onclick="toggleDay(5)">T6</button>
+                        <button class="day-button" data-day="6" onclick="toggleDay(6)">T7</button>
+                    </div>
+                </div>
+
+                <!-- Duration Input -->
+                <div class="time-picker-section">
+                    <label class="time-picker-label">Thời Gian Phun</label>
+                    <div class="duration-input-group">
+                        <input type="number" class="duration-input" id="duration-input" placeholder="5000" value="5000" min="1000" max="60000" />
+                        <span class="duration-unit">ms</span>
+                    </div>
+                </div>
+
+                <!-- Buttons -->
+                <div class="dialog-buttons">
+                    <button class="btn-cancel" onclick="closeDialog()">Hủy</button>
+                    <button class="btn-save" onclick="saveAlarm()">Lưu</button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            // Data
+            let alarms = [];
+            let selectedDays = [1, 1, 1, 1, 1, 0, 0]; // Default: Mon-Fri
+            let currentEditingId = null;
+
+            // Load alarms from localStorage
+            function loadAlarms() {
+                const stored = localStorage.getItem("alarms");
+                if (stored) {
+                    alarms = JSON.parse(stored);
+                    renderAlarmList();
+                }
+            }
+
+            // Save alarms to localStorage
+            function saveAlarmsToStorage() {
+                localStorage.setItem("alarms", JSON.stringify(alarms));
+            }
+
+            // Switch Tab
+            function switchTab(tabId, element) {
+                document.querySelectorAll(".tab-pane").forEach((pane) => pane.classList.remove("active"));
+                document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.remove("active"));
+
+                document.getElementById(tabId).classList.add("active");
+                element.classList.add("active");
+            }
+
+            // Update Clock
+            function updateClock() {
+                const now = new Date();
+                const hours = String(now.getHours()).padStart(2, "0");
+                const minutes = String(now.getMinutes()).padStart(2, "0");
+
+                document.getElementById("time-display").textContent = `${hours}:${minutes}`;
+
+                const weekdays = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+                const months = ["tháng 1", "tháng 2", "tháng 3", "tháng 4", "tháng 5", "tháng 6", "tháng 7", "tháng 8", "tháng 9", "tháng 10", "tháng 11", "tháng 12"];
+
+                const dateStr = `${weekdays[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]}`;
+                document.getElementById("date-display").textContent = dateStr;
+            }
+
+            // Open New Alarm Dialog
+            function openNewAlarmDialog() {
+                currentEditingId = null;
+                selectedDays = [0, 0, 0, 0, 0, 0, 0];
+                document.getElementById("dialog-title").textContent = "Thêm Lịch Phun Sương";
+                document.getElementById("hour-input").value = String(new Date().getHours()).padStart(2, "0");
+                document.getElementById("minute-input").value = String(new Date().getMinutes()).padStart(2, "0");
+                document.getElementById("duration-input").value = "5000";
+
+                document.querySelectorAll(".day-button").forEach((btn) => btn.classList.remove("active"));
+                document.getElementById("dialog-overlay").classList.add("active");
+            }
+
+            // Open Edit Alarm Dialog
+            function openEditAlarmDialog(id) {
+                const alarm = alarms.find((a) => a.id === id);
+                if (!alarm) return;
+
+                currentEditingId = id;
+                document.getElementById("dialog-title").textContent = "Chỉnh Sửa Lịch Phun Sương";
+                document.getElementById("hour-input").value = String(alarm.hour).padStart(2, "0");
+                document.getElementById("minute-input").value = String(alarm.minute).padStart(2, "0");
+                document.getElementById("duration-input").value = alarm.duration;
+
+                selectedDays = [
+                    alarm.weekday & (1 << 0) ? 1 : 0,
+                    alarm.weekday & (1 << 1) ? 1 : 0,
+                    alarm.weekday & (1 << 2) ? 1 : 0,
+                    alarm.weekday & (1 << 3) ? 1 : 0,
+                    alarm.weekday & (1 << 4) ? 1 : 0,
+                    alarm.weekday & (1 << 5) ? 1 : 0,
+                    alarm.weekday & (1 << 6) ? 1 : 0,
+                ];
+
+                document.querySelectorAll(".day-button").forEach((btn, idx) => {
+                    if (selectedDays[idx]) btn.classList.add("active");
+                    else btn.classList.remove("active");
+                });
+
+                document.getElementById("dialog-overlay").classList.add("active");
+            }
+
+            // Close Dialog
+            function closeDialog() {
+                document.getElementById("dialog-overlay").classList.remove("active");
+                currentEditingId = null;
+            }
+
+            // Time Input Functions
+            function incrementHour() {
+                let hour = parseInt(document.getElementById("hour-input").value) || 0;
+                hour = (hour + 1) % 24;
+                document.getElementById("hour-input").value = String(hour).padStart(2, "0");
+            }
+
+            function decrementHour() {
+                let hour = parseInt(document.getElementById("hour-input").value) || 0;
+                hour = (hour - 1 + 24) % 24;
+                document.getElementById("hour-input").value = String(hour).padStart(2, "0");
+            }
+
+            function incrementMinute() {
+                let minute = parseInt(document.getElementById("minute-input").value) || 0;
+                minute = (minute + 1) % 60;
+                document.getElementById("minute-input").value = String(minute).padStart(2, "0");
+            }
+
+            function decrementMinute() {
+                let minute = parseInt(document.getElementById("minute-input").value) || 0;
+                minute = (minute - 1 + 60) % 60;
+                document.getElementById("minute-input").value = String(minute).padStart(2, "0");
+            }
+
+            // Toggle Day
+            function toggleDay(dayIndex) {
+                selectedDays[dayIndex] = selectedDays[dayIndex] ? 0 : 1;
+                const btn = document.querySelector(`[data-day="${dayIndex}"]`);
+                btn.classList.toggle("active");
+            }
+
+            // Save Alarm
+            function saveAlarm() {
+                const hour = parseInt(document.getElementById("hour-input").value);
+                const minute = parseInt(document.getElementById("minute-input").value);
+                const duration = parseInt(document.getElementById("duration-input").value);
+
+                if (isNaN(hour) || isNaN(minute) || isNaN(duration)) {
+                    alert("Vui lòng nhập đầy đủ thông tin");
+                    return;
+                }
+
+                if (duration < 1000 || duration > 60000) {
+                    alert("Thời gian phun phải từ 1000ms đến 60000ms");
+                    return;
+                }
+
+                if (selectedDays.every((d) => d === 0)) {
+                    alert("Vui lòng chọn ít nhất một ngày trong tuần");
+                    return;
+                }
+
+                const weekday = selectedDays.reduce((acc, day, idx) => acc | (day ? 1 << idx : 0), 0);
+
+                if (currentEditingId !== null) {
+                    const alarm = alarms.find((a) => a.id === currentEditingId);
+                    if (alarm) {
+                        alarm.hour = hour;
+                        alarm.minute = minute;
+                        alarm.duration = duration;
+                        alarm.weekday = weekday;
+                    }
+                } else {
+                    const newAlarm = {
+                        id: Date.now(),
+                        hour,
+                        minute,
+                        duration,
+                        weekday,
+                        enabled: true,
+                    };
+                    alarms.push(newAlarm);
+                }
+
+                saveAlarmsToStorage();
+                renderAlarmList();
+                closeDialog();
+            }
+
+            // Delete Alarm
+            function deleteAlarm(id) {
+                if (confirm("Xóa lịch phun này?")) {
+                    alarms = alarms.filter((a) => a.id !== id);
+                    saveAlarmsToStorage();
+                    renderAlarmList();
+                }
+            }
+
+            // Toggle Alarm
+            function toggleAlarm(id) {
+                const alarm = alarms.find((a) => a.id === id);
+                if (alarm) {
+                    alarm.enabled = !alarm.enabled;
+                    saveAlarmsToStorage();
+                    renderAlarmList();
+                }
+            }
+
+            // Render Alarm List
+            function renderAlarmList() {
+                const alarmList = document.getElementById("alarm-list");
+
+                if (alarms.length === 0) {
+                    alarmList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <div class="empty-state-text">Chưa có lịch phun nào</div>
+                    </div>
+                `;
+                    return;
+                }
+
+                alarmList.innerHTML = alarms
+                    .map((alarm) => {
+                        const dayNames = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+                        const activeDays = dayNames
+                            .map((name, idx) => (alarm.weekday & (1 << idx) ? name : ""))
+                            .filter((x) => x)
+                            .join(" ");
+
+                        return `
+                    <div class="alarm-item ${!alarm.enabled ? "disabled" : ""}" onclick="openEditAlarmDialog(${alarm.id})">
+                        <div class="alarm-time-info">
+                            <div class="alarm-time">${String(alarm.hour).padStart(2, "0")}:${String(alarm.minute).padStart(2, "0")}</div>
+                            <div class="alarm-days">
+                                ${dayNames
+                                    .map(
+                                        (name, idx) => `
+                                    <span class="day-badge ${alarm.weekday & (1 << idx) ? "active" : ""}">${name}</span>
+                                `
+                                    )
+                                    .join("")}
+                            </div>
+                            <div class="alarm-duration">Phun: ${alarm.duration}ms</div>
+                        </div>
+                        <button class="alarm-toggle ${alarm.enabled ? "active" : ""}" onclick="event.stopPropagation(); toggleAlarm(${alarm.id})"></button>
+                        <button class="alarm-delete" onclick="event.stopPropagation(); deleteAlarm(${alarm.id})">🗑️</button>
+                    </div>
+                `;
+                    })
+                    .join("");
+            }
+
+            // Close dialog when clicking overlay
+            document.getElementById("dialog-overlay").addEventListener("click", function (e) {
+                if (e.target === this) {
+                    closeDialog();
+                }
+            });
+
+            // Initialize
+            window.addEventListener("load", () => {
+                updateClock();
+                setInterval(updateClock, 1000);
+                loadAlarms();
+            });
+        </script>
+    </body>
+</html>

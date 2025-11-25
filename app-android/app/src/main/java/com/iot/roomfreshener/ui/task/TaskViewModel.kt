@@ -9,8 +9,8 @@ import com.iot.roomfreshener.data.di.TaskRepositoryProvider
 import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskDayMapper
 import com.iot.roomfreshener.data.model.TaskWriteRequest
+import com.iot.roomfreshener.data.remote.DeviceConnectionState
 import com.iot.roomfreshener.data.remote.TaskRemoteEvent
-import com.iot.roomfreshener.data.remote.WebSocketState
 import com.iot.roomfreshener.data.repository.TaskRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,7 +31,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         TaskUiState(
             items = emptyList(),
             isLoading = true,
-            connectionState = WebSocketState.Idle
+            connectionState = DeviceConnectionState.Idle
         )
     )
     val uiState: StateFlow<TaskUiState> = _uiState.asStateFlow()
@@ -164,7 +164,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
 data class TaskUiState(
     val items: List<TaskItem>,
     val isLoading: Boolean,
-    val connectionState: WebSocketState
+    val connectionState: DeviceConnectionState
 )
 
 sealed interface TaskUiEvent {
