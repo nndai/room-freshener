@@ -1,6 +1,7 @@
 package com.iot.roomfreshener.data.remote
 
 import android.os.SystemClock
+import android.util.Log
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
@@ -56,6 +57,7 @@ class BlynkHttpChannel(
     override fun start() {
         // Nếu không có token thì coi như lỗi cấu hình và báo trạng thái Failed
         if (token.isBlank()) {
+            Log.e(TAG, "start() missing Blynk token")
             _state.value = DeviceConnectionState.Failed(
                 channelKind,
                 IllegalStateException("Missing Blynk token"),
@@ -63,6 +65,7 @@ class BlynkHttpChannel(
             return
         }
         if (worker?.isActive == true) return
+        Log.d(TAG, "start() launching polling workers")
         worker = scope.launch {
             supervisorScope {
                 // Một job canh online, một job đọc inbox chạy song song
@@ -74,6 +77,7 @@ class BlynkHttpChannel(
     }
 
     override fun stop() {
+        Log.d(TAG, "stop() requested")
         worker?.cancel()
         worker = null
         _state.value = DeviceConnectionState.Disconnected(channelKind, "stopped")
@@ -82,7 +86,9 @@ class BlynkHttpChannel(
     override suspend fun send(raw: String): Boolean {
         // Lệnh từ app -> ESP được đẩy lên V1 theo format JSON
         if (token.isBlank()) return false
-        return updatePin("V1", raw)
+        val ok = updatePin("V1", raw)
+        Log.d(TAG, "send() success=$ok payload=${raw.take(128)}")
+        return ok
     }
 
     private suspend fun onlineGuardLoop() {
@@ -91,8 +97,10 @@ class BlynkHttpChannel(
             // Lặp lại kiểm tra online mỗi 5s bằng cách đặt V0 về 0 rồi đợi ESP set lại 1
             val connected = probeOnline()
             if (connected) {
+                Log.d(TAG, "onlineGuardLoop() handshake success")
                 _state.value = DeviceConnectionState.Connected(channelKind)
             } else {
+                Log.w(TAG, "onlineGuardLoop() handshake timeout")
                 _state.value = DeviceConnectionState.Disconnected(channelKind, "handshake-timeout")
             }
             delay(ONLINE_CHECK_INTERVAL_MS)
@@ -108,6 +116,7 @@ class BlynkHttpChannel(
                 if (flag == "1") {
                     val payload = getPin("V3")
                     if (!payload.isNullOrBlank()) {
+                        Log.v(TAG, "inboxLoop() payload=${payload.take(128)}")
                         _incoming.emit(payload)
                     }
                     // Luôn reset flag về 0 để ESP biết app đã đọc xong
@@ -120,7 +129,10 @@ class BlynkHttpChannel(
 
     private suspend fun probeOnline(): Boolean {
         val ctx = currentCoroutineContext()
-        if (!updatePin("V0", "0")) return false
+        if (!updatePin("V0", "0")) {
+            Log.w(TAG, "probeOnline() failed to flip V0")
+            return false
+        }
         val deadline = SystemClock.elapsedRealtime() + ONLINE_HANDSHAKE_TIMEOUT_MS
         while (ctx.isActive && SystemClock.elapsedRealtime() < deadline) {
             // Nếu V0 được đặt lại thành 1 bởi ESP thì coi như online thành công
@@ -146,7 +158,9 @@ class BlynkHttpChannel(
         val suffix = "&${pin.lowercase()}=$encoded"
         val url = buildUrl("update", suffix)
         val response = executeGet(url)
-        return response?.trim() == "200"
+        val success = response?.trim() == "200"
+        Log.d(TAG, "updatePin($pin) success=$success")
+        return success
     }
 
     private suspend fun executeGet(url: String): String? = withContext(dispatcher) {
@@ -162,7 +176,9 @@ class BlynkHttpChannel(
     private fun buildUrl(path: String, suffix: String): String {
         // Chuẩn hóa base endpoint để tránh // dư
         val normalizedBase = baseEndpoint.trimEnd('/')
-        return "$normalizedBase/$path?token=$token$suffix"
+        val url = "$normalizedBase/$path?token=$token$suffix"
+        Log.v(TAG, "buildUrl -> $url")
+        return url
     }
 
     private fun unwrapValue(raw: String?): String? {
@@ -198,5 +214,6 @@ class BlynkHttpChannel(
         private const val ONLINE_HANDSHAKE_TIMEOUT_MS = 5_000L
         private const val ONLINE_HANDSHAKE_RETRY_MS = 500L
         private const val INBOX_POLL_INTERVAL_MS = 100L
+        private const val TAG = "BlynkHttpChannel"
     }
 }

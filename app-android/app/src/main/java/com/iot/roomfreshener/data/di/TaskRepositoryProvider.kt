@@ -5,6 +5,7 @@ import com.iot.roomfreshener.data.remote.BlynkHttpChannel
 import com.iot.roomfreshener.data.remote.ChannelKind
 import com.iot.roomfreshener.data.remote.EspWebSocketClient
 import com.iot.roomfreshener.data.remote.HybridDeviceChannel
+import com.iot.roomfreshener.data.remote.MqttDeviceChannel
 import com.iot.roomfreshener.data.remote.TaskRemoteDataSource
 import com.iot.roomfreshener.data.repository.TaskRepository
 import kotlinx.coroutines.CoroutineScope
@@ -32,10 +33,19 @@ object TaskRepositoryProvider {
             token = BuildConfig.BLYNK_TOKEN,
             scope = appScope
         )
+        val mqttChannel = MqttDeviceChannel(
+            host = BuildConfig.MQTT_HOST,
+            port = BuildConfig.MQTT_PORT,
+            username = BuildConfig.MQTT_USERNAME,
+            password = BuildConfig.MQTT_PASSWORD,
+            topic = BuildConfig.MQTT_TOPIC_COMMAND,
+            scope = appScope
+        )
         val hybrid = HybridDeviceChannel(
             listOf(
                 HybridDeviceChannel.ChannelEntry(ChannelKind.WEBSOCKET, websocketChannel),
-                HybridDeviceChannel.ChannelEntry(ChannelKind.BLYNK, blynkChannel)
+                HybridDeviceChannel.ChannelEntry(ChannelKind.BLYNK, blynkChannel),
+                HybridDeviceChannel.ChannelEntry(ChannelKind.MQTT, mqttChannel)
             ),
             appScope
         )

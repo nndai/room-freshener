@@ -1,5 +1,6 @@
 package com.iot.roomfreshener.data.repository
 
+import android.util.Log
 import com.iot.roomfreshener.data.model.HomeSnapshot
 import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskWriteRequest
@@ -46,9 +47,11 @@ class TaskRepository(
 
     init {
         // Bắt đầu mở kết nối ngay khi repository được tạo
+        Log.d(TAG, "init: start device channel")
         deviceChannel.start()
         scope.launch {
             remote.events.collectLatest { event ->
+                Log.v(TAG, "remote event=$event")
                 when (event) {
                     is TaskRemoteEvent.Snapshot -> _tasks.value = event.tasks
                     is TaskRemoteEvent.Home -> _homeSnapshot.value = event.snapshot
@@ -67,6 +70,7 @@ class TaskRepository(
         scope.launch {
             // Mỗi lần kết nối thành công thì chủ động yêu cầu lại danh sách task
             connectionState.collectLatest { state ->
+                Log.d(TAG, "connection state=$state")
                 if (state is DeviceConnectionState.Connected) {
                     refreshTasks()
                     refreshHome()
@@ -76,35 +80,47 @@ class TaskRepository(
     }
 
     suspend fun refreshTasks() {
+        Log.d(TAG, "refreshTasks()")
         remote.requestAllTasks()
     }
 
     suspend fun createTask(request: TaskWriteRequest) {
+        Log.d(TAG, "createTask id=${request.id}")
         remote.createTask(request.copy(id = null))
     }
 
     suspend fun updateTask(request: TaskWriteRequest) {
+        Log.d(TAG, "updateTask id=${request.id}")
         remote.updateTask(request)
     }
 
     suspend fun deleteTask(taskId: Int) {
+        Log.d(TAG, "deleteTask id=$taskId")
         remote.deleteTask(taskId)
     }
 
     suspend fun setTaskEnabled(taskId: Int, enabled: Boolean) {
+        Log.d(TAG, "setTaskEnabled id=$taskId enabled=$enabled")
         remote.setTaskEnabled(taskId, enabled)
     }
 
     suspend fun sprayNow(durationMs: Long) {
+        Log.d(TAG, "sprayNow duration=$durationMs")
         remote.sprayNow(durationMs)
     }
 
     suspend fun refreshHome() {
+        Log.d(TAG, "refreshHome()")
         remote.requestHomeData()
     }
 
     fun reconnect() {
         // Cho phép UI yêu cầu kết nối lại (sẽ khởi động lại Hybrid channel)
+        Log.d(TAG, "reconnect() restarting channel")
         deviceChannel.restart()
+    }
+
+    companion object {
+        private const val TAG = "TaskRepository"
     }
 }

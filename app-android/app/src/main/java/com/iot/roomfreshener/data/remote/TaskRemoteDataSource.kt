@@ -1,6 +1,7 @@
 package com.iot.roomfreshener.data.remote
 
 import android.util.Base64
+import android.util.Log
 import com.iot.roomfreshener.data.model.HomeSnapshot
 import com.iot.roomfreshener.data.model.SprayMoment
 import com.iot.roomfreshener.data.model.Task
@@ -39,12 +40,14 @@ class TaskRemoteDataSource(
     init {
         scope.launch(dispatcher) {
             channel.incoming.collect { raw ->
+                Log.v(TAG, "incoming payload=${raw.take(128)}")
                 handleIncoming(raw)
             }
         }
     }
 
     suspend fun requestAllTasks() {
+        Log.d(TAG, "requestAllTasks()")
         // Lệnh đọc toàn bộ lịch; ESP sẽ trả snapshot kèm base64
         sendJson(
             JSONObject().apply { put("command", "getAllTaskSpray") }
@@ -52,6 +55,7 @@ class TaskRemoteDataSource(
     }
 
     suspend fun requestHomeData() {
+        Log.d(TAG, "requestHomeData()")
         // Đọc dữ liệu tổng quan cho màn hình Home
         sendJson(
             JSONObject().apply { put("command", "getHomeData") }
@@ -59,6 +63,7 @@ class TaskRemoteDataSource(
     }
 
     suspend fun createTask(request: TaskWriteRequest) {
+        Log.d(TAG, "createTask payload=$request")
         // Thêm task mới: truyền đầy đủ thông tin giờ/phút/weekday/duration
         sendJson(
             JSONObject().apply {
@@ -74,6 +79,7 @@ class TaskRemoteDataSource(
 
     suspend fun updateTask(request: TaskWriteRequest) {
         val id = request.id ?: return
+        Log.d(TAG, "updateTask id=$id payload=$request")
         // Cập nhật task hiện tại dựa trên ID đã có
         sendJson(
             JSONObject().apply {
@@ -89,6 +95,7 @@ class TaskRemoteDataSource(
     }
 
     suspend fun deleteTask(taskId: Int) {
+        Log.d(TAG, "deleteTask id=$taskId")
         sendJson(
             JSONObject().apply {
                 put("command", "removeTaskSpray")
@@ -99,6 +106,7 @@ class TaskRemoteDataSource(
 
     suspend fun setTaskEnabled(taskId: Int, enabled: Boolean) {
         // Lưu ý firmware dùng khóa "task_id" khác với các lệnh khác
+        Log.d(TAG, "setTaskEnabled id=$taskId enabled=$enabled")
         sendJson(
             JSONObject().apply {
                 put("command", "setTaskEnabled")
@@ -109,6 +117,7 @@ class TaskRemoteDataSource(
     }
 
     suspend fun sprayNow(durationMs: Long) {
+        Log.d(TAG, "sprayNow duration=$durationMs")
         sendJson(
             JSONObject().apply {
                 put("command", "sprayNow")
@@ -119,6 +128,7 @@ class TaskRemoteDataSource(
 
     private suspend fun sendJson(json: JSONObject) {
         val payload = json.toString()
+        Log.v(TAG, "sendJson payload=${payload.take(128)}")
         val sent = withContext(dispatcher) {
             channel.send(payload)
         }
@@ -136,6 +146,7 @@ class TaskRemoteDataSource(
         try {
             val json = JSONObject(raw)
             val command = json.optString("command")
+            Log.v(TAG, "handleIncoming command=$command")
             when (command) {
                 "getAllTasksSprayResponse" -> emitSnapshot(json)
                 "getHomeDataResponse" -> emitHome(json)
@@ -146,6 +157,7 @@ class TaskRemoteDataSource(
                 else -> Unit
             }
         } catch (ex: JSONException) {
+            Log.e(TAG, "handleIncoming() json error", ex)
             _events.tryEmit(TaskRemoteEvent.Failure("Json error: ${ex.message}"))
         }
     }
@@ -157,6 +169,7 @@ class TaskRemoteDataSource(
 
     private fun emitHome(json: JSONObject) {
         val snapshot = parseHome(json)
+        Log.d(TAG, "emitHome temperature=${snapshot.temperature} total=${snapshot.totalSprayCount}")
         _events.tryEmit(TaskRemoteEvent.Home(snapshot))
     }
 
@@ -256,5 +269,9 @@ class TaskRemoteDataSource(
 
     private fun optIntOrNull(json: JSONObject, key: String): Int? {
         return if (json.has(key) && !json.isNull(key)) json.optInt(key) else null
+    }
+
+    companion object {
+        private const val TAG = "TaskRemoteDataSource"
     }
 }

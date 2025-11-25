@@ -6,7 +6,15 @@ plugins {
 }
 
 val localProps = gradleLocalProperties(rootDir, providers)
-val blynkToken = localProps.getProperty("BLYNK_TOKEN", "as")
+val blynkToken = localProps.getProperty("BLYNK_TOKEN", "...")
+val mqttHost = localProps.getProperty(
+    "MQTT_HOST",
+    "..."
+)
+val mqttPort = localProps.getProperty("MQTT_PORT", "8883").toIntOrNull() ?: 8883
+val mqttUsername = localProps.getProperty("MQTT_USERNAME", "...")
+val mqttPassword = localProps.getProperty("MQTT_PASSWORD", "...")
+val mqttTopic = localProps.getProperty("MQTT_TOPIC_COMMAND", "...")
 
 android {
     namespace = "com.iot.roomfreshener"
@@ -21,6 +29,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BLYNK_TOKEN", "\"$blynkToken\"")
+        buildConfigField("String", "MQTT_HOST", "\"$mqttHost\"")
+        buildConfigField("int", "MQTT_PORT", mqttPort.toString())
+        buildConfigField("String", "MQTT_USERNAME", "\"$mqttUsername\"")
+        buildConfigField("String", "MQTT_PASSWORD", "\"$mqttPassword\"")
+        buildConfigField("String", "MQTT_TOPIC_COMMAND", "\"$mqttTopic\"")
     }
 
     buildTypes {
@@ -59,6 +72,7 @@ dependencies {
     implementation(libs.coroutines.core)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+    implementation(libs.org.eclipse.paho.client.mqttv3)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

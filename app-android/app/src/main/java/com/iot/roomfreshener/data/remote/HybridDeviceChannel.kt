@@ -1,5 +1,6 @@
 package com.iot.roomfreshener.data.remote
 
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -39,12 +40,14 @@ class HybridDeviceChannel(
     }
 
     override fun start() {
+        Log.d(TAG, "start() invoking on ${channelEntries.size} channels")
         if (channelEntries.isEmpty()) return
         _state.value = DeviceConnectionState.Connecting(null)
         channelEntries.forEach { it.channel.start() }
     }
 
     override fun stop() {
+        Log.d(TAG, "stop() called, active=${active?.kind}")
         active = null
         channelEntries.forEach { it.channel.stop() }
         _state.value = DeviceConnectionState.Disconnected(null, "stopped")
@@ -52,6 +55,7 @@ class HybridDeviceChannel(
 
     override suspend fun send(raw: String): Boolean {
         val target = active?.channel ?: return false
+        Log.d(TAG, "send() via ${active?.kind} payload=${raw.take(128)}")
         return target.send(raw)
     }
 
@@ -74,6 +78,7 @@ class HybridDeviceChannel(
     }
 
     private fun handleChildState(entry: ChannelEntry, childState: DeviceConnectionState) {
+        Log.v(TAG, "handleChildState kind=${entry.kind} state=$childState active=${active?.kind}")
         when (childState) {
             is DeviceConnectionState.Connected -> activate(entry)
             is DeviceConnectionState.Disconnected -> onChildDisconnected(entry, childState.reason)
@@ -91,6 +96,7 @@ class HybridDeviceChannel(
             _state.value = DeviceConnectionState.Connected(entry.kind)
             return
         }
+        Log.i(TAG, "activate() selecting ${entry.kind}")
         active = entry
         _state.value = DeviceConnectionState.Connected(entry.kind)
         // Các kênh khác được tắt để tránh chạy song song ngoài mong muốn
@@ -98,6 +104,7 @@ class HybridDeviceChannel(
     }
 
     private fun onChildDisconnected(entry: ChannelEntry, reason: String?) {
+        Log.w(TAG, "onChildDisconnected kind=${entry.kind} reason=$reason")
         if (active?.channel == entry.channel) {
             active = null
             _state.value = DeviceConnectionState.Disconnected(entry.kind, reason)
@@ -108,6 +115,7 @@ class HybridDeviceChannel(
     }
 
     private fun onChildFailed(entry: ChannelEntry, throwable: Throwable) {
+        Log.e(TAG, "onChildFailed kind=${entry.kind}", throwable)
         if (active?.channel == entry.channel) {
             active = null
             _state.value = DeviceConnectionState.Failed(entry.kind, throwable)
@@ -118,10 +126,15 @@ class HybridDeviceChannel(
     }
 
     private fun restartInactive(exclude: ChannelEntry) {
+        Log.d(TAG, "restartInactive() triggered by ${exclude.kind}")
         // Khi active bị mất, khởi động lại tất cả kênh để chọn kết nối mới
         channelEntries.filter { it.channel !== exclude.channel }.forEach { it.channel.start() }
         exclude.channel.start()
     }
 
     data class ChannelEntry(val kind: ChannelKind, val channel: DeviceChannel)
+
+    companion object {
+        private const val TAG = "HybridDeviceChannel"
+    }
 }

@@ -1,5 +1,6 @@
 package com.iot.roomfreshener.data.remote
 
+import android.util.Log
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,30 +37,36 @@ class EspWebSocketClient(
 
     private val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            Log.d(TAG, "WebSocket connected: $baseUrl")
             _state.value = DeviceConnectionState.Connected(channelKind)
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            Log.w(TAG, "WebSocket closing: code=$code reason=$reason")
             socket = null
             _state.value = DeviceConnectionState.Disconnected(channelKind, reason)
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            Log.i(TAG, "WebSocket closed: code=$code reason=$reason")
             socket = null
             _state.value = DeviceConnectionState.Disconnected(channelKind, reason)
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            Log.e(TAG, "WebSocket failure", t)
             socket = null
             _state.value = DeviceConnectionState.Failed(channelKind, t)
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
+            Log.v(TAG, "Received payload: ${text.take(128)}")
             _incoming.tryEmit(text)
         }
     }
 
     override fun start() {
+        Log.d(TAG, "start() called, current state=${_state.value}")
         if (_state.value is DeviceConnectionState.Connected || _state.value is DeviceConnectionState.Connecting) {
             return
         }
@@ -69,12 +76,17 @@ class EspWebSocketClient(
     }
 
     override fun stop() {
+        Log.d(TAG, "stop() called")
         socket?.close(1000, "client-disconnect")
         socket = null
         _state.value = DeviceConnectionState.Disconnected(channelKind, "stopped")
     }
 
-    override suspend fun send(raw: String): Boolean = socket?.send(raw) ?: false
+    override suspend fun send(raw: String): Boolean {
+        val sent = socket?.send(raw) ?: false
+        Log.d(TAG, "send() success=$sent payload=${raw.take(128)}")
+        return sent
+    }
 
     private fun defaultOkHttpClient(): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
@@ -86,5 +98,9 @@ class EspWebSocketClient(
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .addInterceptor(logging)
             .build()
+    }
+
+    companion object {
+        private const val TAG = "EspWebSocket"
     }
 }
