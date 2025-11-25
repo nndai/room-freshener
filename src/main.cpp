@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "Config.h"
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
@@ -8,29 +9,28 @@
 #include <OneButton.h>
 #include "LedController.h"
 #include "SprayScheduler.h"
-
-#define _TASK_SLEEP_ON_IDLE_RUN
-#define _TASK_STD_FUNCTION
 #include <TaskScheduler.h>
+#include <BlynkSimpleEsp8266.h>
 
 
-#define WEBSOCKET_PORT 82
-#define SPRAY_PIN 12
-#define LED_PIN 2
-#define BUTTON_PIN 14
-#define I2C_SDA_PIN 4
-#define I2C_SCL_PIN 5
+WiFiConfig wifiConfig = {
+    WEBSOCKET,
+    WIFIAP_SSID_DEFAULT,
+    WIFIAP_PASSWORD_DEFAULT,
+    "",
+    ""
+};
 
-#define FILENAME_SPRAY_LOG "sprayLog.txt"
+SprayDataTotal sprayDataTotal = { 0, 0 };
 
-const char* ssid = "ESP8266_AP";
-const char* password = "123456788";
-
-WebSocketsServer websocket(WEBSOCKET_PORT);
+WebSocketsServer* websocket = nullptr;
+WiFiClient* wifiClient = nullptr;
+BlynkArduinoClient* blynkTransport = nullptr;
+BlynkWifi* blynk = nullptr;
 
 RTC_DS1307 rtc;
-SprayController sprayController(SPRAY_PIN);
-SprayScheduler sprayScheduler(&sprayController, &rtc);
+SprayController sprayController(SPRAY_PIN, &rtc);
+SprayScheduler sprayScheduler(&sprayController, &rtc, FOLDER_DATA FILENAME_SPRAY_TASKS);
 
 LedController led(LED_PIN, true);
 OneButton button(BUTTON_PIN, true);
@@ -39,6 +39,10 @@ Scheduler mainScheduler;
 
 //======================== Prototypes ========================
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
+void setupWebSocket();
+void setupBlynk();
+void setupConnection();
+void handleMessage(uint8_t num, uint8_t* payload);
 
 
 //======================== Tasks =============================
@@ -47,12 +51,43 @@ Task taskUpdateSprayScheduler(2000, TASK_FOREVER, []() {
     }, & mainScheduler, true);
 
 Task taskLoopWebsockets(10, TASK_FOREVER, []() {
-    websocket.loop();
-    }, & mainScheduler, true);
+    if (websocket) {
+        websocket->loop();
+    }
+    }, & mainScheduler, false);
+
+Task taskLoopBlynk(10, TASK_FOREVER, []() {
+    if (blynk) {
+        blynk->run();
+    }
+    }, & mainScheduler, false);
 
 Task taskUpdateLed(50, TASK_FOREVER, []() {
     led.update();
     }, & mainScheduler, true);
+
+Task taskButtonCheck(10, TASK_FOREVER, []() {
+    button.tick();
+    }, & mainScheduler, true);
+
+Task taskConnectToBlynk(200, TASK_FOREVER, []() {
+    if (blynk && blynk->connect(1000)) {
+        Serial.println("Connected to Blynk Cloud!");
+        taskConnectToBlynk.disable();
+        taskLoopBlynk.enable();
+    }
+    });
+
+Task taskConnectWiFiBlynk(200, TASK_FOREVER, []() {
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("Connected to WiFi!");
+        Serial.print("IP address: ");
+        Serial.println(WiFi.localIP());
+        Serial.println("Connecting to Blynk Cloud...");
+        setupBlynk();
+        taskConnectWiFiBlynk.disable();
+    }
+    }, & mainScheduler, false);
 
 
 //========================= Setup & Loop ======================
@@ -62,15 +97,12 @@ void setup() {
     LittleFS.begin();
     LittleFS.format();
 
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(ssid, password);
+    loadWiFiConfig(wifiConfig);
+    loadSprayDataTotal(sprayDataTotal);
+    sprayScheduler.load();
 
-    Serial.println("Access Point đã được kích hoạt!");
-    Serial.print("SSID: "); Serial.println(ssid);
-    Serial.print("IPAP: "); Serial.println(WiFi.softAPIP());
+    setupConnection();
 
-    websocket.begin();
-    websocket.onEvent(webSocketEvent);
 
     led.blink(500);
 }
@@ -80,6 +112,71 @@ void loop() {
 }
 
 //=============================================================
+
+
+void setupWebSocket() {
+    if (blynk) {
+        blynk->disconnect();
+        delete blynk;
+        delete blynkTransport;
+        delete wifiClient;
+        blynk = nullptr;
+        blynkTransport = nullptr;
+        wifiClient = nullptr;
+    }
+
+    if (!websocket) {
+        websocket = new WebSocketsServer(WEBSOCKET_PORT);
+        websocket->begin();
+        websocket->onEvent(webSocketEvent);
+    }
+}
+
+void setupBlynk() {
+    if (websocket) {
+        websocket->close();
+        delete websocket;
+        websocket = nullptr;
+    }
+
+    if (!blynk) {
+        wifiClient = new WiFiClient();
+        blynkTransport = new BlynkArduinoClient(*wifiClient);
+        blynk = new BlynkWifi(*blynkTransport);
+        blynk->config(BLYNK_AUTH_TOKEN);
+        taskConnectToBlynk.enable();
+    }
+}
+
+
+void setupConnection() {
+    if (wifiConfig.mode == WEBSOCKET) {
+        WiFi.mode(WIFI_AP);
+        WiFi.softAP(wifiConfig.ssidAp.c_str(), wifiConfig.passwordAp.c_str());
+        Serial.println("Access Point đã được kích hoạt!");
+        Serial.print("SSID: "); Serial.println(wifiConfig.ssidAp);
+        Serial.print("IPAP: "); Serial.println(WiFi.softAPIP());
+        setupWebSocket();
+        taskLoopWebsockets.enable();
+    }
+    else if (wifiConfig.mode == BLYNK) {
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(wifiConfig.ssid.c_str(), wifiConfig.password.c_str());
+        Serial.println("Kết nối tới WiFi...");
+        taskConnectWiFiBlynk.enable();
+    }
+}
+
+
+void sendMessage(uint8_t num, String& message) {
+    if (websocket) {
+        websocket->sendTXT(num, message);
+    }
+    else if (blynk) {
+        blynk->virtualWrite(V3, message);
+        blynk->virtualWrite(V2, 1);
+    }
+}
 
 void handleMessage(uint8_t num, uint8_t* payload) {
     JsonDocument doc;
@@ -109,7 +206,13 @@ void handleMessage(uint8_t num, uint8_t* payload) {
      */
     if (command == "sprayNow") {
         uint32_t duration = doc["duration"] | 0;
-        sprayController.on(duration);
+        DateTime timestamp;
+        const DateTime* tsPtr = nullptr;
+        if (rtc.isrunning()) {
+            timestamp = rtc.now();
+            tsPtr = &timestamp;
+        }
+        sprayController.on(duration, SPRAY_REASON_MANUAL, tsPtr);
         Serial.printf("Spraying for %u ms\n", duration);
     }
 
@@ -160,8 +263,11 @@ void handleMessage(uint8_t num, uint8_t* payload) {
             responseDoc["message"] = "success.";
         }
         String jsonStr;
-        serializeJson(doc, jsonStr);
-        websocket.sendTXT(num, jsonStr);
+        serializeJson(responseDoc, jsonStr);
+        sendMessage(num, jsonStr);
+        if (responseDoc["status"] == true) {
+            sprayScheduler.save();
+        }
     }
 
     /**
@@ -203,8 +309,11 @@ void handleMessage(uint8_t num, uint8_t* payload) {
             }
         }
         String jsonStr;
-        serializeJson(doc, jsonStr);
-        websocket.sendTXT(num, jsonStr);
+        serializeJson(responseDoc, jsonStr);
+        sendMessage(num, jsonStr);
+        if (responseDoc["status"] == true) {
+            sprayScheduler.save();
+        }
     }
 
     /**
@@ -243,16 +352,40 @@ void handleMessage(uint8_t num, uint8_t* payload) {
             }
             else {
                 Serial.printf("Spray task with ID %u not found.\n", taskId);
-                responseDoc["status"] = true;
+                responseDoc["status"] = false;
                 responseDoc["message"] = "Task not found.";
             }
         }
         String jsonStr;
-        serializeJson(doc, jsonStr);
-        websocket.sendTXT(num, jsonStr);
+        serializeJson(responseDoc, jsonStr);
+        sendMessage(num, jsonStr);
+        if (responseDoc["status"] == true) {
+            sprayScheduler.save();
+        }
     }
 
-    else if( command == "editTaskSpray") {
+    /**
+     * Xử lý lệnh chỉnh sửa lịch phun sương
+     * example:
+     * received JSON:
+     * {
+     *   "command": "editTaskSpray",
+     *   "taskId": 1,
+     *   "hour": 15,
+     *   "minute": 45,
+     *   "weekday": 3,
+     *   "duration": 7000,
+     *   "enabled": true
+     * }
+     *
+     * response JSON:
+     * {
+     *   "command": "editTaskSprayResponse",
+     *   "status": 1,
+     *   "message":"success"
+     * }
+     */
+    else if (command == "editTaskSpray") {
         uint8_t taskId = doc["taskId"] | 255;
         uint8_t hour = doc["hour"] | 255;
         uint8_t minute = doc["minute"] | 255;
@@ -274,8 +407,11 @@ void handleMessage(uint8_t num, uint8_t* payload) {
             responseDoc["message"] = "Task not found.";
         }
         String jsonStr;
-        serializeJson(doc, jsonStr);
-        websocket.sendTXT(num, jsonStr);
+        serializeJson(responseDoc, jsonStr);
+        sendMessage(num, jsonStr);
+        if (responseDoc["status"] == true) {
+            sprayScheduler.save();
+        }
     }
 
     /**
@@ -296,7 +432,7 @@ void handleMessage(uint8_t num, uint8_t* payload) {
         uint32_t currentTime = rtc.now().unixtime();
         Serial.printf("Current RTC time: %u\n", currentTime);
         String responseStr = "{\"command\":\"getTimeResponse\",\"timestamp\":" + String(currentTime) + "}";
-        websocket.sendTXT(num, responseStr.c_str());
+        sendMessage(num, responseStr);
     }
 
     /**
@@ -320,21 +456,82 @@ void handleMessage(uint8_t num, uint8_t* payload) {
         tasksJson["command"] = "getAllTasksSprayResponse";
         String jsonStr;
         serializeJson(tasksJson, jsonStr);
-        websocket.sendTXT(num, jsonStr);
+        sendMessage(num, jsonStr);
         Serial.println("Sent all spray tasks JSON.");
     }
 
+    /**
+     * Xử lý lệnh đặt thời gian RTC
+     * example:
+     * received JSON:
+     * {
+     *   "command": "setTime",
+     *   "timestamp": 1633024800
+     * }
+     *
+     * response JSON:
+     * {
+     *   "command": "setTimeResponse",
+     *   "status": 1,
+     *   "message":"RTC time updated. Current time: 1633024800"
+     * }
+     */
     else if (command == "setTime") {
         uint32_t timestamp = doc["timestamp"] | 0;
         rtc.adjust(DateTime(timestamp));
         Serial.printf("RTC time set to %u\n", timestamp);
-        String responseStr = "{\"command\":\"setTimeResponse\",\"status\":true,\"message\":\"RTC time updated. Current time: " 
+        String responseStr = "{\"command\":\"setTimeResponse\",\"status\":true,\"message\":\"RTC time updated. Current time: "
             + String(rtc.now().unixtime()) + "\"}";
-        websocket.sendTXT(num, responseStr.c_str());
+        sendMessage(num, responseStr);
     }
+
+    /**
+     * Xử lý lệnh lấy dữ liệu trang chủ
+     * example:
+     * received JSON:
+     * {
+     *   "command": "getHomeData"
+     * }
+     *
+     * response JSON:
+     * {
+     *   "command": "getHomeDataResponse",
+     *   "tempature": 29.3,
+     *   "humidity": 75.5,
+     *   "lastSprayHourTime": 14,
+     *   "lastSprayMinuteTime": 30,
+     *   "lastSprayDurationMs": 5000,
+     *   "lastSprayReason": 1,
+     *   "nextSprayHourTime": 15,
+     *   "nextSprayMinuteTime": 45,
+     *   "nextSprayDurationMs": 7000,
+     *   "totalSprayCount": 10,
+     *   "totalSprayDuration": 60000
+     * }
+     */
+    else if(command == "getHomeData") {
+        JsonDocument responseDoc;
+        responseDoc["command"] = "getHomeDataResponse";
+        responseDoc["temperature"] = 29.3; //TODO
+        responseDoc["humidity"] = 75.5; //TODO
+        responseDoc["lastSprayHourTime"] = sprayScheduler.getLastSprayInfo().timestamp.hour();
+        responseDoc["lastSprayMinuteTime"] = sprayScheduler.getLastSprayInfo().timestamp.minute();
+        responseDoc["lastSprayDurationMs"] = sprayScheduler.getLastSprayInfo().durationMs;
+        responseDoc["lastSprayReason"] = static_cast<uint8_t>(sprayScheduler.getLastSprayInfo().reason);
+        responseDoc["nextSprayHourTime"] = sprayScheduler.getNextSprayInfo().timestamp.hour();
+        responseDoc["nextSprayMinuteTime"] = sprayScheduler.getNextSprayInfo().timestamp.minute();
+        responseDoc["nextSprayDurationMs"] = sprayScheduler.getNextSprayInfo().durationMs; // == 0 => no next spray
+        responseDoc["totalSprayCount"] = sprayDataTotal.totalSpraysCount;
+        responseDoc["totalSprayDuration"] = sprayDataTotal.totalSprayDuration;
+        String jsonStr;
+        serializeJson(responseDoc, jsonStr);
+        sendMessage(num, jsonStr);
+    }
+
     else {
         Serial.printf("Unknown command: %s\n", command.c_str());
-        websocket.sendTXT(num, "{\"command\":\"unknownCommandResponse\",\"status\":false,\"message\":\"Unknown command.\"}");
+        String responseStr = "{\"command\":\"unknownCommandResponse\",\"status\":false,\"message\":\"Unknown command.\"}";
+        sendMessage(num, responseStr);
     }
 }
 
@@ -361,3 +558,22 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         break;
     }
 }
+
+/*
+    V0(int) trạng online/offline, 1 là online, 0 là offline
+    V1(string) dữ liệu từ app -> esp
+    V2(int) kiểm tra có dữ liệu từ esp gửi lên app, 1 là có dữ liệu, 0 là không có
+    V3(string) dữ liệu từ esp gửi lên app
+*/
+
+BLYNK_WRITE(V0) {
+    Serial.println("pong");
+    blynk->virtualWrite(V0, 1);
+}
+
+BLYNK_WRITE(V1) {
+    uint8_t* payload = (uint8_t*)param.asString();
+    Serial.printf("Blynk Receive Text: %s\n", payload);
+    handleMessage(255, payload);
+}
+

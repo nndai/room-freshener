@@ -1,6 +1,8 @@
 package com.iot.roomfreshener.data.remote
 
 import android.util.Base64
+import com.iot.roomfreshener.data.model.HomeSnapshot
+import com.iot.roomfreshener.data.model.SprayMoment
 import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskWriteRequest
 import kotlinx.coroutines.CoroutineDispatcher
@@ -17,8 +19,12 @@ import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/**
+ * Tầng gửi/nhận JSON tới ESP. Không quan tâm kênh vật lý,
+ * chỉ cần một DeviceChannel để đẩy/gom chuỗi JSON.
+ */
 class TaskRemoteDataSource(
-    private val client: EspWebSocketClient,
+    private val channel: DeviceChannel,
     scope: CoroutineScope,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
@@ -32,19 +38,28 @@ class TaskRemoteDataSource(
 
     init {
         scope.launch(dispatcher) {
-            client.messages.collect { raw ->
+            channel.incoming.collect { raw ->
                 handleIncoming(raw)
             }
         }
     }
 
     suspend fun requestAllTasks() {
+        // Lệnh đọc toàn bộ lịch; ESP sẽ trả snapshot kèm base64
         sendJson(
             JSONObject().apply { put("command", "getAllTaskSpray") }
         )
     }
 
+    suspend fun requestHomeData() {
+        // Đọc dữ liệu tổng quan cho màn hình Home
+        sendJson(
+            JSONObject().apply { put("command", "getHomeData") }
+        )
+    }
+
     suspend fun createTask(request: TaskWriteRequest) {
+        // Thêm task mới: truyền đầy đủ thông tin giờ/phút/weekday/duration
         sendJson(
             JSONObject().apply {
                 put("command", "addTaskSpray")
@@ -59,6 +74,7 @@ class TaskRemoteDataSource(
 
     suspend fun updateTask(request: TaskWriteRequest) {
         val id = request.id ?: return
+        // Cập nhật task hiện tại dựa trên ID đã có
         sendJson(
             JSONObject().apply {
                 put("command", "editTaskSpray")
@@ -82,6 +98,7 @@ class TaskRemoteDataSource(
     }
 
     suspend fun setTaskEnabled(taskId: Int, enabled: Boolean) {
+        // Lưu ý firmware dùng khóa "task_id" khác với các lệnh khác
         sendJson(
             JSONObject().apply {
                 put("command", "setTaskEnabled")
@@ -103,9 +120,10 @@ class TaskRemoteDataSource(
     private suspend fun sendJson(json: JSONObject) {
         val payload = json.toString()
         val sent = withContext(dispatcher) {
-            client.send(payload)
+            channel.send(payload)
         }
         if (!sent) {
+            // Nếu kênh hiện tại chưa kết nối thành công -> báo lỗi UI biết
             _events.tryEmit(
                 TaskRemoteEvent.Failure(
                     "Không thể gửi lệnh ${json.optString("command", "").ifBlank { "n/a" }}"
@@ -120,6 +138,7 @@ class TaskRemoteDataSource(
             val command = json.optString("command")
             when (command) {
                 "getAllTasksSprayResponse" -> emitSnapshot(json)
+                "getHomeDataResponse" -> emitHome(json)
                 "addTaskSprayResponse",
                 "removeTaskSprayResponse",
                 "editTaskSprayResponse",
@@ -134,6 +153,11 @@ class TaskRemoteDataSource(
     private fun emitSnapshot(json: JSONObject) {
         val tasks = parseTasks(json)
         _events.tryEmit(TaskRemoteEvent.Snapshot(tasks))
+    }
+
+    private fun emitHome(json: JSONObject) {
+        val snapshot = parseHome(json)
+        _events.tryEmit(TaskRemoteEvent.Home(snapshot))
     }
 
     private fun emitCommandResult(command: String, json: JSONObject) {
@@ -164,6 +188,7 @@ class TaskRemoteDataSource(
         repeat(safeCount) {
             val record = ByteArray(sizePerTask)
             buffer.get(record)
+            // Map từng byte đúng layout firmware gửi về
             val id = record.getOrNull(0)?.toInt()?.and(0xFF) ?: 0
             val hour = record.getOrNull(1)?.toInt()?.and(0xFF) ?: 0
             val minute = record.getOrNull(2)?.toInt()?.and(0xFF) ?: 0
@@ -185,5 +210,51 @@ class TaskRemoteDataSource(
             )
         }
         return tasks
+    }
+
+    private fun parseHome(json: JSONObject): HomeSnapshot {
+        val temp = json.optDouble("temperature", Double.NaN).takeIf { !it.isNaN() }
+        val humidity = json.optDouble("humidity", Double.NaN).takeIf { !it.isNaN() }
+
+        val lastHour = optIntOrNull(json, "lastSprayHourTime")
+        val lastMinute = optIntOrNull(json, "lastSprayMinuteTime")
+        val lastDuration = json.optLong("lastSprayDurationMs", 0L)
+        val last = if (lastHour != null || lastMinute != null || lastDuration > 0) {
+            SprayMoment(
+                hour = lastHour,
+                minute = lastMinute,
+                durationMs = lastDuration,
+                reason = optIntOrNull(json, "lastSprayReason")
+            )
+        } else {
+            null
+        }
+
+        val nextHour = optIntOrNull(json, "nextSprayHourTime")
+        val nextMinute = optIntOrNull(json, "nextSprayMinuteTime")
+        val nextDuration = json.optLong("nextSprayDurationMs", 0L)
+        val next = if (nextHour != null || nextMinute != null || nextDuration > 0) {
+            SprayMoment(
+                hour = nextHour,
+                minute = nextMinute,
+                durationMs = nextDuration,
+                reason = null
+            )
+        } else {
+            null
+        }
+
+        return HomeSnapshot(
+            temperature = temp,
+            humidity = humidity,
+            lastSpray = last,
+            nextSpray = next,
+            totalSprayCount = json.optLong("totalSprayCount", 0L),
+            totalSprayDuration = json.optLong("totalSprayDuration", 0L)
+        )
+    }
+
+    private fun optIntOrNull(json: JSONObject, key: String): Int? {
+        return if (json.has(key) && !json.isNull(key)) json.optInt(key) else null
     }
 }

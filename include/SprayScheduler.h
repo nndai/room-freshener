@@ -8,6 +8,7 @@
 #include <RTClib.h>
 #include <Base_64.h>
 #include "SprayController.h"
+#include "Config.h"
 
 
 /**
@@ -22,24 +23,33 @@ struct SprayTask {
     uint32_t duration;  // thời gian phun (ms)  
 };
 
+struct SprayInfo {
+    DateTime timestamp;
+    uint32_t durationMs;
+    SprayReason reason;
+};
+
 class SprayScheduler {
 private:
     std::vector<SprayTask> tasks;
-    SprayController* spray;
+    SprayController* _spray;
 
-    RTC_DS1307* rtc;
-    std::vector<bool> triggered;
+    RTC_DS1307* _rtc;
+    std::vector<bool> _triggered;
 
-    uint8_t lastMinute = 255;
+    uint8_t _lastMinute = 255;
+    String _fileNameSave = "";
+    SprayInfo _lastSprayInfo;
 
 public:
     /**
      * @brief Khởi tạo SprayScheduler.
      * @param sc Con trỏ đến đối tượng SprayController.
      * @param rtcModule Con trỏ đến đối tượng RTC_DS1307.
+     * @param fileNameSave Tên file để lưu lịch phun.
      */
-    SprayScheduler(SprayController* sc, RTC_DS1307* rtcModule)
-        : spray(sc), rtc(rtcModule), triggered(256, false) {
+    SprayScheduler(SprayController* sc, RTC_DS1307* rtcModule, String fileNameSave = "/sprayTasks.bin")
+        : _spray(sc), _rtc(rtcModule), _triggered(256, false), _fileNameSave(fileNameSave) {
     }
 
     /**
@@ -73,17 +83,17 @@ public:
         }
         if (id == 0) {
             id = getNextTaskId();
-            if(id == 255) {
+            if (id == 255) {
                 return 255; // full
             }
 
             SprayTask task = { id, hour, minute, weekday, enabled, duration };
             tasks.push_back(task);
-            triggered[id] = false;
+            _triggered[id] = false;
             return task.id;
         }
         else {
-            if (editTask({ id, hour, minute, weekday, enabled, duration })){
+            if (editTask({ id, hour, minute, weekday, enabled, duration })) {
                 return id;
             }
 
@@ -100,7 +110,7 @@ public:
         for (size_t i = 0; i < tasks.size(); ++i) {
             if (tasks[i].id == id) {
                 tasks.erase(tasks.begin() + i);
-                triggered[id] = false;
+                _triggered[id] = false;
                 return true;
             }
         }
@@ -162,8 +172,8 @@ public:
      * @param filename Tên file để lưu.
      * @return true nếu lưu thành công, false nếu thất bại.
      */
-    bool save(const char* filename) {
-        File file = LittleFS.open(filename, "w");
+    bool save() {
+        File file = LittleFS.open(_fileNameSave.c_str(), "w");
         if (!file) return false;
 
         uint32_t count = tasks.size();
@@ -182,21 +192,21 @@ public:
      * @param filename Tên file để tải.
      * @return true nếu tải thành công, false nếu thất bại.
      */
-    bool load(const char* filename) {
-        File file = LittleFS.open(filename, "r");
+    bool load() {
+        File file = LittleFS.open(_fileNameSave.c_str(), "r");
         if (!file) return false;
 
         uint32_t count = 0;
         file.read((uint8_t*)&count, sizeof(count));
 
         tasks.clear();
-        triggered.clear();
+        _triggered.clear();
 
         for (uint32_t i = 0; i < count; i++) {
             SprayTask t;
             if (file.read((uint8_t*)&t, sizeof(SprayTask)) == sizeof(SprayTask)) {
                 tasks.push_back(t);
-                triggered.push_back(false);
+                _triggered.push_back(false);
             }
             else {
                 break; // file bị hỏng
@@ -212,24 +222,30 @@ public:
      * @note Phải được gọi liên tục trong vòng lặp chính.
      */
     void update() {
-        if (!rtc->isrunning()) return;
-        DateTime now = rtc->now();
+        if (!_rtc->isrunning()) return;
+        DateTime now = _rtc->now();
 
-        if (now.minute() != lastMinute) {
-            std::fill(triggered.begin(), triggered.end(), false);
-            lastMinute = now.minute();
+        if (now.minute() != _lastMinute) {
+            std::fill(_triggered.begin(), _triggered.end(), false);
+            _lastMinute = now.minute();
         }
 
         for (size_t i = 0; i < tasks.size(); i++) {
             SprayTask& t = tasks[i];
             if (!t.enabled) continue;
 
-            bool dayMatch = t.weekday & (1 << now.dayOfTheWeek());
+            bool isOnceDaily = (t.weekday == 0);
+            bool dayMatch = isOnceDaily || (t.weekday & (1 << now.dayOfTheWeek()));
             bool timeMatch = (t.hour == now.hour() && t.minute == now.minute());
 
-            if (timeMatch && dayMatch && !triggered[t.id]) {
-                spray->on(t.duration);
-                triggered[t.id] = true;
+            if (timeMatch && dayMatch && !_triggered[t.id]) {
+                _spray->on(t.duration, SPRAY_REASON_SCHEDULED, &now);
+                _lastSprayInfo = { now, t.duration, SPRAY_REASON_SCHEDULED };
+                _triggered[t.id] = true;
+                if (isOnceDaily) {
+                    t.enabled = false;
+                    save();
+                }
             }
         }
     }
@@ -325,6 +341,41 @@ public:
         }
 
         return true;
+    }
+
+    /**
+     * @brief Kích hoạt phun sương ngay lập tức.
+     * @param duration Thời gian phun (ms).
+     * @param reason Lý do phun sương.
+     * @param timestamp Thời gian phun (nếu có).
+     */
+    void sprayNow(uint32_t duration, SprayReason reason = SPRAY_REASON_OTHER, const DateTime* timestamp = nullptr) {
+        _spray->on(duration, reason, timestamp);
+        _lastSprayInfo = { timestamp ? *timestamp : (_rtc && _rtc->isrunning() ? _rtc->now() : DateTime()), duration, reason };
+    }
+
+    /**
+     * @brief Lấy thông tin lần phun sương cuối cùng.
+     * @return Thông tin lần phun sương cuối cùng.
+     */
+    SprayInfo getLastSprayInfo() const {
+        return _lastSprayInfo;
+    }
+
+    SprayInfo getNextSprayInfo() const {
+        DateTime now = _rtc->isrunning() ? _rtc->now() : DateTime();
+        for (const auto& t : tasks) {
+            if (!t.enabled) continue;
+
+            bool isOnceDaily = (t.weekday == 0);
+            bool dayMatch = isOnceDaily || (t.weekday & (1 << now.dayOfTheWeek()));
+            DateTime scheduledTime(now.year(), now.month(), now.day(), t.hour, t.minute, 0);
+
+            if (scheduledTime > now && dayMatch) {
+                return { scheduledTime, t.duration, SPRAY_REASON_SCHEDULED };
+            }
+        }
+        return { DateTime(), 0, SPRAY_REASON_OTHER };
     }
 
 };
