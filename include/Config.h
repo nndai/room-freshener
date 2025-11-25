@@ -8,6 +8,7 @@
 enum ModeConnect {
     WEBSOCKET,
     BLYNK,
+    MQTT,
 };
 
 struct WiFiConfig {
@@ -18,10 +19,6 @@ struct WiFiConfig {
     String password;
 };
 
-struct SprayDataTotal {
-    uint32_t totalSpraysCount;
-    uint32_t totalSprayDuration; // in seconds
-};
 
 #define WEBSOCKET_PORT 82
 #define SPRAY_PIN 12
@@ -30,26 +27,34 @@ struct SprayDataTotal {
 #define I2C_SDA_PIN 4
 #define I2C_SCL_PIN 5
 
-#define FOLDER_DATA "/data/"
-#define FOLDER_LOG "/logs/"
-#define FOLDER_SPRAY_LOG FOLDER_LOG "spray/"
-#define FILENAME_SPRAY_TASKS "sprayTasks.bin"
-#define FILENAME_WIFI_CONFIG "wifiConfig.json"
-#define FILENAME_SPRAY_DATA_TOTAL "sprayDataTotal.bin"
+#define PATH_FOLDER_DATA "/datas/"
+#define PATH_FOLDER_LOG "/logs/"
+#define PATH_FOLDER_SPRAY_LOG "/logs/spray/"
+#define PATH_FILENAME_SPRAY_TASKS "/datas/sprayTasks.bin"
+#define PATH_FILENAME_WIFI_CONFIG "/datas/wifiConfig.json"
+#define PATH_FILENAME_SPRAY_DATA_TOTAL "/datas/sprayDataTotal.bin"
 
 #define WIFIAP_SSID_DEFAULT "MÁY XỊT PHÒNG"
 #define WIFIAP_PASSWORD_DEFAULT "123456788"
 
-#define BLYNK_TEMPLATE_ID ""
-#define BLYNK_TEMPLATE_NAME ""
-#define BLYNK_AUTH_TOKEN ""
+#define TLS_MQTT_URL "..."
+#define TLS_MQTT_PORT 8883
+#define TLS_MQTT_USERNAME "..."
+#define TLS_MQTT_PASSWORD "..."
+#define MQTT_TOPIC_COMMAND "roomFreshener/command"
+
+#define MQTT_MAX_PACKET_SIZE 1500
+
+#define BLYNK_TEMPLATE_ID "..."
+#define BLYNK_TEMPLATE_NAME "..."
+#define BLYNK_AUTH_TOKEN "..."
 #define NO_GLOBAL_BLYNK
 
 #define _TASK_SLEEP_ON_IDLE_RUN
 #define _TASK_STD_FUNCTION
 
 void loadWiFiConfig(WiFiConfig& wifiConfig) {
-    File file = LittleFS.open(FOLDER_DATA FILENAME_WIFI_CONFIG, "r");
+    File file = LittleFS.open(PATH_FILENAME_WIFI_CONFIG, "r");
     if (!file) {
         Serial.println("No WiFi config file found. Using default settings.");
         return;
@@ -80,38 +85,7 @@ void saveWiFiConfig(const WiFiConfig& wifiConfig) {
     doc["passwordAp"] = wifiConfig.passwordAp;
     doc["ssid"] = wifiConfig.ssid;
     doc["password"] = wifiConfig.password;
-    File file = LittleFS.open(FOLDER_DATA FILENAME_WIFI_CONFIG, "w");
-    serializeJson(doc, file);
-    file.close();
-}
-
-void loadSprayDataTotal(SprayDataTotal& sprayDataTotal) {
-    File file = LittleFS.open(FOLDER_DATA FILENAME_SPRAY_DATA_TOTAL, "r");
-    if (!file) {
-        Serial.println("No spray data total file found. Using default values.");
-        return;
-    }
-
-    JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, file);
-    if (error) {
-        Serial.print(F("Failed to read spray data total file: "));
-        Serial.println(error.f_str());
-        file.close();
-        return;
-    }
-
-    sprayDataTotal.totalSpraysCount = doc["totalSpraysCount"] | 0;
-    sprayDataTotal.totalSprayDuration = doc["totalSprayDuration"] | 0;
-
-    file.close();
-}
-
-void saveSprayDataTotal(const SprayDataTotal& sprayDataTotal) {
-    JsonDocument doc;
-    doc["totalSpraysCount"] = sprayDataTotal.totalSpraysCount;
-    doc["totalSprayDuration"] = sprayDataTotal.totalSprayDuration;
-    File file = LittleFS.open(FOLDER_DATA FILENAME_SPRAY_DATA_TOTAL, "w");
+    File file = LittleFS.open(PATH_FILENAME_WIFI_CONFIG, "w");
     serializeJson(doc, file);
     file.close();
 }
