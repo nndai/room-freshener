@@ -11,6 +11,7 @@
 #include "SprayScheduler.h"
 #include <TaskScheduler.h>
 #include <BlynkSimpleEsp8266.h>
+#include <PubSubClient.h>
 
 
 WiFiConfig wifiConfig = {
@@ -21,16 +22,17 @@ WiFiConfig wifiConfig = {
     ""
 };
 
-SprayDataTotal sprayDataTotal = { 0, 0 };
-
 WebSocketsServer* websocket = nullptr;
-WiFiClient* wifiClient = nullptr;
+WiFiClient* wifiBlynkClient = nullptr;
 BlynkArduinoClient* blynkTransport = nullptr;
 BlynkWifi* blynk = nullptr;
 
+WiFiClientSecure* wifiMqttClient = nullptr;
+PubSubClient* mqttClient = nullptr;
+
 RTC_DS1307 rtc;
-SprayController sprayController(SPRAY_PIN, &rtc);
-SprayScheduler sprayScheduler(&sprayController, &rtc, FOLDER_DATA FILENAME_SPRAY_TASKS);
+SprayController sprayController(SPRAY_PIN, &rtc, PATH_FOLDER_SPRAY_LOG, PATH_FILENAME_SPRAY_DATA_TOTAL);
+SprayScheduler sprayScheduler(&sprayController, &rtc, PATH_FILENAME_SPRAY_TASKS);
 
 LedController led(LED_PIN, true);
 OneButton button(BUTTON_PIN, true);
@@ -39,55 +41,23 @@ Scheduler mainScheduler;
 
 //======================== Prototypes ========================
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
+void setupTask();
 void setupWebSocket();
 void setupBlynk();
+void setupMqtt();
 void setupConnection();
 void handleMessage(uint8_t num, uint8_t* payload);
 
 
 //======================== Tasks =============================
-Task taskUpdateSprayScheduler(2000, TASK_FOREVER, []() {
-    sprayScheduler.update();
-    }, & mainScheduler, true);
+Task* taskUpdateSprayScheduler;
+Task* taskUpdateLed;
+Task* taskButtonCheck;
+Task* taskConnectToBlynk;
+Task* taskConnectToMqtt;
+Task* taskConnectWiFi;
+Task* taskLoopConnection;
 
-Task taskLoopWebsockets(10, TASK_FOREVER, []() {
-    if (websocket) {
-        websocket->loop();
-    }
-    }, & mainScheduler, false);
-
-Task taskLoopBlynk(10, TASK_FOREVER, []() {
-    if (blynk) {
-        blynk->run();
-    }
-    }, & mainScheduler, false);
-
-Task taskUpdateLed(50, TASK_FOREVER, []() {
-    led.update();
-    }, & mainScheduler, true);
-
-Task taskButtonCheck(10, TASK_FOREVER, []() {
-    button.tick();
-    }, & mainScheduler, true);
-
-Task taskConnectToBlynk(200, TASK_FOREVER, []() {
-    if (blynk && blynk->connect(1000)) {
-        Serial.println("Connected to Blynk Cloud!");
-        taskConnectToBlynk.disable();
-        taskLoopBlynk.enable();
-    }
-    });
-
-Task taskConnectWiFiBlynk(200, TASK_FOREVER, []() {
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("Connected to WiFi!");
-        Serial.print("IP address: ");
-        Serial.println(WiFi.localIP());
-        Serial.println("Connecting to Blynk Cloud...");
-        setupBlynk();
-        taskConnectWiFiBlynk.disable();
-    }
-    }, & mainScheduler, false);
 
 
 //========================= Setup & Loop ======================
@@ -95,16 +65,16 @@ void setup() {
     led.on();
     Serial.begin(115200);
     LittleFS.begin();
-    LittleFS.format();
+    LittleFS.format(); // Uncomment this line to format LittleFS on first run
 
+    setupTask();
     loadWiFiConfig(wifiConfig);
-    loadSprayDataTotal(sprayDataTotal);
+
     sprayScheduler.load();
 
     setupConnection();
 
-
-    led.blink(500);
+    led.blink(2, 500, 2000);
 }
 
 void loop() {
@@ -114,15 +84,94 @@ void loop() {
 //=============================================================
 
 
+void setupTask() {
+    taskUpdateSprayScheduler = new Task(2000, TASK_FOREVER, []() {
+        sprayScheduler.update();
+        }, &mainScheduler, true);
+
+    taskUpdateLed = new Task(50, TASK_FOREVER, []() {
+        led.update();
+        }, &mainScheduler, true);
+
+    taskButtonCheck = new Task(10, TASK_FOREVER, []() {
+        button.tick();
+        }, &mainScheduler, true);
+
+
+    taskConnectToBlynk = new Task(200, TASK_FOREVER, []() {
+        if (blynk && blynk->connect(1000)) {
+            Serial.println("Connected to Blynk Cloud!");
+            taskConnectToBlynk->disable();
+            taskLoopConnection->enable();
+        }
+        }, &mainScheduler, false);
+
+    taskConnectToMqtt = new Task(2000, TASK_FOREVER, []() {
+        String clientID = "ESPClient-";
+        clientID += String(random(0xffff), HEX);
+        if (mqttClient && mqttClient->connect(clientID.c_str(), TLS_MQTT_USERNAME, TLS_MQTT_PASSWORD)) {
+            Serial.println("Connected to MQTT Broker!");
+            mqttClient->subscribe(MQTT_TOPIC_COMMAND);
+            taskConnectToMqtt->disable();
+            taskLoopConnection->enable();
+        }
+        }, &mainScheduler, false);
+
+    taskConnectWiFi = new Task(200, TASK_FOREVER, []() {
+        if (WiFi.status() == WL_CONNECTED) {
+            Serial.println("Connected to WiFi!");
+            Serial.print("IP address: ");
+            Serial.println(WiFi.localIP());
+            Serial.println("Connecting to Blynk Cloud...");
+
+            if (wifiConfig.mode == BLYNK) {
+                setupBlynk();
+            }
+            else if (wifiConfig.mode == MQTT) {
+                setupMqtt();
+            }
+            taskConnectWiFi->disable();
+        }
+        }, &mainScheduler, false);
+
+    taskLoopConnection = new Task(10, TASK_FOREVER, []() {
+        if (websocket) {
+            websocket->loop();
+        }
+        else if (mqttClient) {
+            mqttClient->loop();
+            if (!mqttClient->connected()) {
+                taskConnectToMqtt->enable();
+                taskLoopConnection->disable();
+            }
+        }
+        else if (blynk) {
+            blynk->run();
+        }
+        }, &mainScheduler, false);
+
+}
+
+
 void setupWebSocket() {
     if (blynk) {
         blynk->disconnect();
         delete blynk;
-        delete blynkTransport;
-        delete wifiClient;
+        if (blynkTransport)
+            delete blynkTransport;
+        if (wifiBlynkClient)
+            delete wifiBlynkClient;
         blynk = nullptr;
         blynkTransport = nullptr;
-        wifiClient = nullptr;
+        wifiBlynkClient = nullptr;
+    }
+    if (mqttClient) {
+        mqttClient->disconnect();
+        delete mqttClient;
+        if (wifiMqttClient)
+            delete wifiMqttClient;
+        wifiMqttClient = nullptr;
+        mqttClient = nullptr;
     }
 
     if (!websocket) {
@@ -130,6 +179,8 @@ void setupWebSocket() {
         websocket->begin();
         websocket->onEvent(webSocketEvent);
     }
+
+    taskLoopConnection->enable();
 }
 
 void setupBlynk() {
@@ -140,11 +191,41 @@ void setupBlynk() {
     }
 
     if (!blynk) {
-        wifiClient = new WiFiClient();
-        blynkTransport = new BlynkArduinoClient(*wifiClient);
+        wifiBlynkClient = new WiFiClient();
+        blynkTransport = new BlynkArduinoClient(*wifiBlynkClient);
         blynk = new BlynkWifi(*blynkTransport);
         blynk->config(BLYNK_AUTH_TOKEN);
-        taskConnectToBlynk.enable();
+        taskConnectToBlynk->enable();
+    }
+}
+
+void setupMqtt() {
+    if (websocket) {
+        websocket->close();
+        delete websocket;
+        websocket = nullptr;
+    }
+    if (blynk) {
+        blynk->disconnect();
+        delete blynk;
+        if (blynkTransport)
+            delete blynkTransport;
+        if (wifiBlynkClient)
+            delete wifiBlynkClient;
+        blynk = nullptr;
+        blynkTransport = nullptr;
+        wifiBlynkClient = nullptr;
+    }
+
+    if (!mqttClient) {
+        wifiMqttClient = new WiFiClientSecure();
+        wifiMqttClient->setInsecure();
+        mqttClient = new PubSubClient(*wifiMqttClient);
+        mqttClient->setServer(TLS_MQTT_URL, TLS_MQTT_PORT);
+        mqttClient->setCallback([](char* topic, uint8_t* payload, unsigned int length) {
+            handleMessage(254, payload);
+            });
+
     }
 }
 
@@ -157,13 +238,12 @@ void setupConnection() {
         Serial.print("SSID: "); Serial.println(wifiConfig.ssidAp);
         Serial.print("IPAP: "); Serial.println(WiFi.softAPIP());
         setupWebSocket();
-        taskLoopWebsockets.enable();
     }
-    else if (wifiConfig.mode == BLYNK) {
+    else {
         WiFi.mode(WIFI_STA);
         WiFi.begin(wifiConfig.ssid.c_str(), wifiConfig.password.c_str());
         Serial.println("Kết nối tới WiFi...");
-        taskConnectWiFiBlynk.enable();
+        taskConnectWiFi->enable();
     }
 }
 
@@ -175,6 +255,9 @@ void sendMessage(uint8_t num, String& message) {
     else if (blynk) {
         blynk->virtualWrite(V3, message);
         blynk->virtualWrite(V2, 1);
+    }
+    else if (mqttClient) {
+        mqttClient->publish(MQTT_TOPIC_COMMAND, message.c_str());
     }
 }
 
@@ -509,7 +592,7 @@ void handleMessage(uint8_t num, uint8_t* payload) {
      *   "totalSprayDuration": 60000
      * }
      */
-    else if(command == "getHomeData") {
+    else if (command == "getHomeData") {
         JsonDocument responseDoc;
         responseDoc["command"] = "getHomeDataResponse";
         responseDoc["temperature"] = 29.3; //TODO
@@ -521,8 +604,12 @@ void handleMessage(uint8_t num, uint8_t* payload) {
         responseDoc["nextSprayHourTime"] = sprayScheduler.getNextSprayInfo().timestamp.hour();
         responseDoc["nextSprayMinuteTime"] = sprayScheduler.getNextSprayInfo().timestamp.minute();
         responseDoc["nextSprayDurationMs"] = sprayScheduler.getNextSprayInfo().durationMs; // == 0 => no next spray
+        
+        SprayController::SprayDataTotal sprayDataTotal = sprayController.getSprayDataTotal();
+        
         responseDoc["totalSprayCount"] = sprayDataTotal.totalSpraysCount;
         responseDoc["totalSprayDuration"] = sprayDataTotal.totalSprayDuration;
+
         String jsonStr;
         serializeJson(responseDoc, jsonStr);
         sendMessage(num, jsonStr);
