@@ -241,7 +241,12 @@ void setupConnection() {
     }
     else {
         WiFi.mode(WIFI_STA);
-        WiFi.begin(wifiConfig.ssid.c_str(), wifiConfig.password.c_str());
+        if( wifiConfig.password.length() == 0 ) {
+            WiFi.begin(wifiConfig.ssid.c_str());
+        }
+        else {
+            WiFi.begin(wifiConfig.ssid.c_str(), wifiConfig.password.c_str());
+        }
         Serial.println("Kết nối tới WiFi...");
         taskConnectWiFi->enable();
     }
@@ -613,6 +618,64 @@ void handleMessage(uint8_t num, uint8_t* payload) {
         String jsonStr;
         serializeJson(responseDoc, jsonStr);
         sendMessage(num, jsonStr);
+    }
+
+    /**
+     * Xử lý lệnh đặt cấu hình WiFi
+     * example:
+     * received JSON:
+     * {
+     *   "command": "setWiFiConfig",
+     *   "ssidAp": "MyESPAP",
+     *   "passwordAp": "password123",
+     *   "ssid": "MyWiFi",
+     *   "password": "wifiPassword",
+     *   "modeConnect": 1
+     * }
+     *
+     * response JSON:
+     * {
+     *   "command": "setWiFiConfigResponse",
+     *   "status": 1,
+     *   "message":"WiFi configuration updated. Rebooting..."
+     * }
+     */
+    else if(command == "setWiFiConfig") {
+        String ssidAp = doc["ssidAp"] | "";
+        String passwordAp = doc["passwordAp"] | "";
+        String ssid = doc["ssid"] | "";
+        String password = doc["password"] | "";
+        uint8_t mode = doc["modeConnect"] | 0;
+
+        if(ssidAp.length() > 32 || passwordAp.length() > 64 ||
+           ssid.length() > 32 || password.length() > 64 ||
+           mode > MQTT) {
+            Serial.println("Invalid WiFi configuration parameters.");
+            String responseStr = "{\"command\":\"setWiFiConfigResponse\",\"status\":false,\"message\":\"Invalid parameters.\"}";
+            sendMessage(num, responseStr);
+            return;
+        }
+
+        // If SSID/AP is empty, keep the old value
+        if(ssidAp.length() < 1) {
+            ssidAp = wifiConfig.ssidAp;
+            passwordAp = wifiConfig.passwordAp;
+        }
+
+        wifiConfig.ssidAp = ssidAp;
+        wifiConfig.passwordAp = passwordAp;
+        wifiConfig.ssid = ssid;
+        wifiConfig.password = password;
+        wifiConfig.mode = static_cast<ModeConnect>(mode);
+
+        saveWiFiConfig(wifiConfig);
+
+        String responseStr = "{\"command\":\"setWiFiConfigResponse\",\"status\":true,\"message\":\"WiFi configuration updated. Rebooting...\"}";
+        sendMessage(num, responseStr);
+
+        Serial.println("WiFi configuration updated. Rebooting...");
+        delay(1000);
+        ESP.restart();
     }
 
     else {

@@ -4,6 +4,7 @@ import android.util.Log
 import com.iot.roomfreshener.data.model.HomeSnapshot
 import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskWriteRequest
+import com.iot.roomfreshener.data.model.WifiConfigPayload
 import com.iot.roomfreshener.data.remote.DeviceChannel
 import com.iot.roomfreshener.data.remote.DeviceConnectionState
 import com.iot.roomfreshener.data.remote.TaskRemoteDataSource
@@ -36,6 +37,9 @@ class TaskRepository(
     private val _homeSnapshot = MutableStateFlow<HomeSnapshot?>(null)
     val homeSnapshot: StateFlow<HomeSnapshot?> = _homeSnapshot.asStateFlow()
 
+    private val _deviceTimeSeconds = MutableStateFlow<Long?>(null)
+    val deviceTimeSeconds: StateFlow<Long?> = _deviceTimeSeconds.asStateFlow()
+
     private val _commandEvents = MutableSharedFlow<TaskRemoteEvent.CommandResult>(
         replay = 0,
         extraBufferCapacity = 16,
@@ -55,6 +59,7 @@ class TaskRepository(
                 when (event) {
                     is TaskRemoteEvent.Snapshot -> _tasks.value = event.tasks
                     is TaskRemoteEvent.Home -> _homeSnapshot.value = event.snapshot
+                    is TaskRemoteEvent.DeviceTime -> _deviceTimeSeconds.value = event.timestampSeconds
                     is TaskRemoteEvent.CommandResult -> _commandEvents.emit(event)
                     is TaskRemoteEvent.Failure -> _commandEvents.emit(
                         TaskRemoteEvent.CommandResult(
@@ -112,6 +117,21 @@ class TaskRepository(
     suspend fun refreshHome() {
         Log.d(TAG, "refreshHome()")
         remote.requestHomeData()
+    }
+
+    suspend fun requestDeviceTime() {
+        Log.d(TAG, "requestDeviceTime()")
+        remote.requestDeviceTime()
+    }
+
+    suspend fun syncDeviceTime(timestampSeconds: Long) {
+        Log.d(TAG, "syncDeviceTime() timestamp=$timestampSeconds")
+        remote.setDeviceTime(timestampSeconds)
+    }
+
+    suspend fun updateWifiConfig(payload: WifiConfigPayload) {
+        Log.d(TAG, "updateWifiConfig() mode=${payload.mode}")
+        remote.updateWifiConfig(payload)
     }
 
     fun reconnect() {

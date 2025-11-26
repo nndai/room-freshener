@@ -6,6 +6,7 @@ import com.iot.roomfreshener.data.model.HomeSnapshot
 import com.iot.roomfreshener.data.model.SprayMoment
 import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskWriteRequest
+import com.iot.roomfreshener.data.model.WifiConfigPayload
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -59,6 +60,37 @@ class TaskRemoteDataSource(
         // Đọc dữ liệu tổng quan cho màn hình Home
         sendJson(
             JSONObject().apply { put("command", "getHomeData") }
+        )
+    }
+
+    suspend fun requestDeviceTime() {
+        Log.d(TAG, "requestDeviceTime()")
+        sendJson(
+            JSONObject().apply { put("command", "getTime") }
+        )
+    }
+
+    suspend fun setDeviceTime(timestampSeconds: Long) {
+        Log.d(TAG, "setDeviceTime() timestamp=$timestampSeconds")
+        sendJson(
+            JSONObject().apply {
+                put("command", "setTime")
+                put("timestamp", timestampSeconds)
+            }
+        )
+    }
+
+    suspend fun updateWifiConfig(payload: WifiConfigPayload) {
+        Log.d(TAG, "updateWifiConfig() mode=${payload.mode} ssidAp=${payload.ssidAp}")
+        sendJson(
+            JSONObject().apply {
+                put("command", "setWiFiConfig")
+                put("modeConnect", payload.mode.value)
+                put("ssidAp", payload.ssidAp)
+                put("passwordAp", payload.passwordAp)
+                put("ssid", payload.ssid)
+                put("password", payload.password)
+            }
         )
     }
 
@@ -150,10 +182,13 @@ class TaskRemoteDataSource(
             when (command) {
                 "getAllTasksSprayResponse" -> emitSnapshot(json)
                 "getHomeDataResponse" -> emitHome(json)
+                "getTimeResponse" -> emitDeviceTime(json)
                 "addTaskSprayResponse",
                 "removeTaskSprayResponse",
                 "editTaskSprayResponse",
-                "setTaskEnabledResponse" -> emitCommandResult(command, json)
+                "setTaskEnabledResponse",
+                "setTimeResponse",
+                "setWiFiConfigResponse" -> emitCommandResult(command, json)
                 else -> Unit
             }
         } catch (ex: JSONException) {
@@ -171,6 +206,14 @@ class TaskRemoteDataSource(
         val snapshot = parseHome(json)
         Log.d(TAG, "emitHome temperature=${snapshot.temperature} total=${snapshot.totalSprayCount}")
         _events.tryEmit(TaskRemoteEvent.Home(snapshot))
+    }
+
+    private fun emitDeviceTime(json: JSONObject) {
+        if (!json.has("timestamp")) return
+        val timestamp = json.optLong("timestamp", 0L)
+        if (timestamp > 0) {
+            _events.tryEmit(TaskRemoteEvent.DeviceTime(timestamp))
+        }
     }
 
     private fun emitCommandResult(command: String, json: JSONObject) {
