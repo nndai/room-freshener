@@ -3,10 +3,10 @@ package com.iot.roomfreshener.ui.home
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.iot.roomfreshener.data.di.TaskRepositoryProvider
+import com.iot.roomfreshener.data.di.DeviceRepositoryProvider
 import com.iot.roomfreshener.data.model.HomeSnapshot
 import com.iot.roomfreshener.data.remote.DeviceConnectionState
-import com.iot.roomfreshener.data.repository.TaskRepository
+import com.iot.roomfreshener.data.repository.DeviceControlRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository: TaskRepository = TaskRepositoryProvider.provide()
+    private val repository: DeviceControlRepository = DeviceRepositoryProvider.provide()
 
     val homeSnapshot: StateFlow<HomeSnapshot?> = repository.homeSnapshot
     val connectionState: StateFlow<DeviceConnectionState> = repository.connectionState

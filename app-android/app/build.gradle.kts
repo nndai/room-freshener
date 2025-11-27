@@ -6,15 +6,15 @@ plugins {
 }
 
 val localProps = gradleLocalProperties(rootDir, providers)
-val blynkToken = localProps.getProperty("BLYNK_TOKEN", "...")
+val blynkToken = localProps.getProperty("BLYNK_TOKEN", "")
 val mqttHost = localProps.getProperty(
     "MQTT_HOST",
-    "..."
+    ""
 )
 val mqttPort = localProps.getProperty("MQTT_PORT", "8883").toIntOrNull() ?: 8883
-val mqttUsername = localProps.getProperty("MQTT_USERNAME", "...")
-val mqttPassword = localProps.getProperty("MQTT_PASSWORD", "...")
-val mqttTopic = localProps.getProperty("MQTT_TOPIC_COMMAND", "...")
+val mqttUsername = localProps.getProperty("MQTT_USERNAME", "")
+val mqttPassword = localProps.getProperty("MQTT_PASSWORD", "")
+val mqttTopic = localProps.getProperty("MQTT_TOPIC_COMMAND", "")
 
 android {
     namespace = "com.iot.roomfreshener"

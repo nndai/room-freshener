@@ -25,18 +25,18 @@ import java.nio.ByteOrder
  * Tầng gửi/nhận JSON tới ESP. Không quan tâm kênh vật lý,
  * chỉ cần một DeviceChannel để đẩy/gom chuỗi JSON.
  */
-class TaskRemoteDataSource(
+class DeviceCommandDataSource(
     private val channel: DeviceChannel,
     scope: CoroutineScope,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
 
-    private val _events = MutableSharedFlow<TaskRemoteEvent>(
+    private val _events = MutableSharedFlow<DeviceCommandEvent>(
         replay = 0,
         extraBufferCapacity = 32,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-    val events: SharedFlow<TaskRemoteEvent> = _events.asSharedFlow()
+    val events: SharedFlow<DeviceCommandEvent> = _events.asSharedFlow()
 
     init {
         scope.launch(dispatcher) {
@@ -167,7 +167,7 @@ class TaskRemoteDataSource(
         if (!sent) {
             // Nếu kênh hiện tại chưa kết nối thành công -> báo lỗi UI biết
             _events.tryEmit(
-                TaskRemoteEvent.Failure(
+                DeviceCommandEvent.Failure(
                     "Không thể gửi lệnh ${json.optString("command", "").ifBlank { "n/a" }}"
                 )
             )
@@ -193,32 +193,32 @@ class TaskRemoteDataSource(
             }
         } catch (ex: JSONException) {
             Log.e(TAG, "handleIncoming() json error", ex)
-            _events.tryEmit(TaskRemoteEvent.Failure("Json error: ${ex.message}"))
+            _events.tryEmit(DeviceCommandEvent.Failure("Json error: ${ex.message}"))
         }
     }
 
     private fun emitSnapshot(json: JSONObject) {
         val tasks = parseTasks(json)
-        _events.tryEmit(TaskRemoteEvent.Snapshot(tasks))
+        _events.tryEmit(DeviceCommandEvent.Snapshot(tasks))
     }
 
     private fun emitHome(json: JSONObject) {
         val snapshot = parseHome(json)
         Log.d(TAG, "emitHome temperature=${snapshot.temperature} total=${snapshot.totalSprayCount}")
-        _events.tryEmit(TaskRemoteEvent.Home(snapshot))
+        _events.tryEmit(DeviceCommandEvent.Home(snapshot))
     }
 
     private fun emitDeviceTime(json: JSONObject) {
         if (!json.has("timestamp")) return
         val timestamp = json.optLong("timestamp", 0L)
         if (timestamp > 0) {
-            _events.tryEmit(TaskRemoteEvent.DeviceTime(timestamp))
+            _events.tryEmit(DeviceCommandEvent.DeviceTime(timestamp))
         }
     }
 
     private fun emitCommandResult(command: String, json: JSONObject) {
         _events.tryEmit(
-            TaskRemoteEvent.CommandResult(
+            DeviceCommandEvent.CommandResult(
                 command = command,
                 success = json.optBoolean("status", false),
                 message = json.optString("message")
@@ -315,6 +315,6 @@ class TaskRemoteDataSource(
     }
 
     companion object {
-        private const val TAG = "TaskRemoteDataSource"
+        private const val TAG = "DeviceCommandDataSource"
     }
 }

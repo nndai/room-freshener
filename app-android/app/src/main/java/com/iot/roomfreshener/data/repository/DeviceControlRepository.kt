@@ -6,9 +6,9 @@ import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskWriteRequest
 import com.iot.roomfreshener.data.model.WifiConfigPayload
 import com.iot.roomfreshener.data.remote.DeviceChannel
+import com.iot.roomfreshener.data.remote.DeviceCommandDataSource
+import com.iot.roomfreshener.data.remote.DeviceCommandEvent
 import com.iot.roomfreshener.data.remote.DeviceConnectionState
-import com.iot.roomfreshener.data.remote.TaskRemoteDataSource
-import com.iot.roomfreshener.data.remote.TaskRemoteEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -21,12 +21,12 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
- * Repository gom tất cả luồng dữ liệu nhiệm vụ phun.
+ * Repository gom tất cả luồng dữ liệu điều khiển thiết bị.
  * Nhiệm vụ chính: khởi động kênh kết nối, phát snapshot về UI,
  * relay sự kiện thành công/thất bại và cung cấp API thao tác.
  */
-class TaskRepository(
-    private val remote: TaskRemoteDataSource,
+class DeviceControlRepository(
+    private val remote: DeviceCommandDataSource,
     private val deviceChannel: DeviceChannel,
     private val scope: CoroutineScope
 ) {
@@ -40,12 +40,12 @@ class TaskRepository(
     private val _deviceTimeSeconds = MutableStateFlow<Long?>(null)
     val deviceTimeSeconds: StateFlow<Long?> = _deviceTimeSeconds.asStateFlow()
 
-    private val _commandEvents = MutableSharedFlow<TaskRemoteEvent.CommandResult>(
+    private val _commandEvents = MutableSharedFlow<DeviceCommandEvent.CommandResult>(
         replay = 0,
         extraBufferCapacity = 16,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-    val commandEvents: SharedFlow<TaskRemoteEvent.CommandResult> = _commandEvents.asSharedFlow()
+    val commandEvents: SharedFlow<DeviceCommandEvent.CommandResult> = _commandEvents.asSharedFlow()
 
     val connectionState: StateFlow<DeviceConnectionState> = deviceChannel.state
 
@@ -57,12 +57,12 @@ class TaskRepository(
             remote.events.collectLatest { event ->
                 Log.v(TAG, "remote event=$event")
                 when (event) {
-                    is TaskRemoteEvent.Snapshot -> _tasks.value = event.tasks
-                    is TaskRemoteEvent.Home -> _homeSnapshot.value = event.snapshot
-                    is TaskRemoteEvent.DeviceTime -> _deviceTimeSeconds.value = event.timestampSeconds
-                    is TaskRemoteEvent.CommandResult -> _commandEvents.emit(event)
-                    is TaskRemoteEvent.Failure -> _commandEvents.emit(
-                        TaskRemoteEvent.CommandResult(
+                    is DeviceCommandEvent.Snapshot -> _tasks.value = event.tasks
+                    is DeviceCommandEvent.Home -> _homeSnapshot.value = event.snapshot
+                    is DeviceCommandEvent.DeviceTime -> _deviceTimeSeconds.value = event.timestampSeconds
+                    is DeviceCommandEvent.CommandResult -> _commandEvents.emit(event)
+                    is DeviceCommandEvent.Failure -> _commandEvents.emit(
+                        DeviceCommandEvent.CommandResult(
                             command = "error",
                             success = false,
                             message = event.message
@@ -141,6 +141,6 @@ class TaskRepository(
     }
 
     companion object {
-        private const val TAG = "TaskRepository"
+        private const val TAG = "DeviceControlRepository"
     }
 }

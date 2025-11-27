@@ -3,31 +3,31 @@ package com.iot.roomfreshener.data.di
 import com.iot.roomfreshener.BuildConfig
 import com.iot.roomfreshener.data.remote.BlynkHttpChannel
 import com.iot.roomfreshener.data.remote.ChannelKind
+import com.iot.roomfreshener.data.remote.DeviceCommandDataSource
 import com.iot.roomfreshener.data.remote.EspWebSocketClient
 import com.iot.roomfreshener.data.remote.HybridDeviceChannel
 import com.iot.roomfreshener.data.remote.MqttDeviceChannel
-import com.iot.roomfreshener.data.remote.TaskRemoteDataSource
-import com.iot.roomfreshener.data.repository.TaskRepository
+import com.iot.roomfreshener.data.repository.DeviceControlRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
-object TaskRepositoryProvider {
+object DeviceRepositoryProvider {
 
     private const val DEFAULT_WS_URL = "ws://192.168.137.1:82"
 
     @Volatile
-    private var repository: TaskRepository? = null
+    private var repository: DeviceControlRepository? = null
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    fun provide(): TaskRepository {
+    fun provide(): DeviceControlRepository {
         return repository ?: synchronized(this) {
             repository ?: buildRepository().also { repository = it }
         }
     }
 
-    private fun buildRepository(): TaskRepository {
+    private fun buildRepository(): DeviceControlRepository {
         val websocketChannel = EspWebSocketClient(DEFAULT_WS_URL)
         val blynkChannel = BlynkHttpChannel(
             token = BuildConfig.BLYNK_TOKEN,
@@ -49,7 +49,7 @@ object TaskRepositoryProvider {
             ),
             appScope
         )
-        val remote = TaskRemoteDataSource(hybrid, appScope)
-        return TaskRepository(remote, hybrid, appScope)
+        val remote = DeviceCommandDataSource(hybrid, appScope)
+        return DeviceControlRepository(remote, hybrid, appScope)
     }
 }

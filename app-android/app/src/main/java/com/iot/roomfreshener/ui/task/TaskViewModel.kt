@@ -5,13 +5,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.iot.roomfreshener.R
 import com.iot.roomfreshener.adapter.TaskItem
-import com.iot.roomfreshener.data.di.TaskRepositoryProvider
+import com.iot.roomfreshener.data.di.DeviceRepositoryProvider
 import com.iot.roomfreshener.data.model.Task
-import com.iot.roomfreshener.data.model.TaskDayMapper
+import com.iot.roomfreshener.data.model.WeekdayBitmaskMapper
 import com.iot.roomfreshener.data.model.TaskWriteRequest
 import com.iot.roomfreshener.data.remote.DeviceConnectionState
-import com.iot.roomfreshener.data.remote.TaskRemoteEvent
-import com.iot.roomfreshener.data.repository.TaskRepository
+import com.iot.roomfreshener.data.remote.DeviceCommandEvent
+import com.iot.roomfreshener.data.repository.DeviceControlRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 
 class TaskViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository: TaskRepository = TaskRepositoryProvider.provide()
+    private val repository: DeviceControlRepository = DeviceRepositoryProvider.provide()
     private val dayLabels = application.resources.getStringArray(R.array.task_day_letters).toList()
 
     private val _uiState = MutableStateFlow(
@@ -69,7 +69,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun handleCommandResult(event: TaskRemoteEvent.CommandResult) {
+    private fun handleCommandResult(event: DeviceCommandEvent.CommandResult) {
         if (event.success) {
             if (event.command in successCommands) {
                 refresh()
@@ -89,7 +89,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun saveTask(item: TaskItem) {
-        val mask = TaskDayMapper.labelsToMask(item.repeatDays)
+        val mask = WeekdayBitmaskMapper.labelsToMask(item.repeatDays)
         val request = TaskWriteRequest(
             id = item.id.toInt().takeIf { it > 0 },
             hour = item.hour,
@@ -140,7 +140,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun Task.toTaskItem(): TaskItem {
-        val labels = TaskDayMapper.maskToLabels(weekdayMask, dayLabels)
+        val labels = WeekdayBitmaskMapper.maskToLabels(weekdayMask, dayLabels)
         return TaskItem(
             id = id.toLong(),
             hour = hour,

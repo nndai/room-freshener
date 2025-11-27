@@ -3,7 +3,7 @@ package com.iot.roomfreshener.data.model
 /**
  * Chuyển đổi giữa bitmask weekday của firmware và danh sách ký hiệu trong UI.
  */
-object TaskDayMapper {
+object WeekdayBitmaskMapper {
     private val firmwareOrder = listOf("CN", "T2", "T3", "T4", "T5", "T6", "T7")
     private val labelToBit by lazy {
         firmwareOrder.mapIndexed { index, label -> label to index }.toMap()
