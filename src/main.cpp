@@ -12,7 +12,10 @@
 #include "SprayScheduler.h"
 #include <TaskScheduler.h>
 #include <PubSubClient.h>
-
+#include <ESP8266HTTPClient.h>
+#include "RequestWifiInet.h"
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 
 WiFiConfig wifiConfig = {
     WEBSOCKET,
@@ -27,6 +30,9 @@ WebSocketsServer* websocket = nullptr;
 
 WiFiClientSecure* wifiMqttClient = nullptr;
 PubSubClient* mqttClient = nullptr;
+
+WiFiUDP* ntpUDP = nullptr;
+NTPClient* ntpClient = nullptr;
 
 RTC_DS1307 rtc;
 SprayController sprayController(SPRAY_PIN, &rtc, PATH_FOLDER_SPRAY_LOG, PATH_FILENAME_SPRAY_DATA_TOTAL);
@@ -45,6 +51,8 @@ void setupMqtt();
 void setupConnection();
 void handleMessage(uint8_t num, uint8_t* payload, uint32_t length);
 void printEspInfo();
+String getEspInfo();
+void printBanner();
 
 //======================== Tasks =============================
 Task* taskUpdateSprayScheduler;
@@ -53,7 +61,7 @@ Task* taskButtonCheck;
 Task* taskConnectToMqtt;
 Task* taskConnectWiFi;
 Task* taskLoopConnection;
-
+Task* taskRequestWifiInet;
 
 
 //========================= Setup & Loop ======================
@@ -72,12 +80,15 @@ void setup() {
     if (!rtc.begin(&Wire)) {
         Serial.println("Failed to initialize RTC.");
     }
-    
+    if( !rtc.isrunning()) {
+        Serial.println("RTC is NOT running");
+    }
+
     setupTask();
     loadWiFiConfig(wifiConfig);
 
     sprayScheduler.load();
-
+    sprayController.loadSprayDataTotal();
     setupConnection();
 
     led.blink(3, 50, 5000);
@@ -149,6 +160,26 @@ void printEspInfo() {
 void setupTask() {
     Serial.println("Setting up tasks...");
     taskUpdateSprayScheduler = new Task(2000, TASK_FOREVER, []() {
+        if (!rtc.isrunning()) {
+            if (WiFi.status() == WL_CONNECTED && WiFi.getMode() != WIFI_AP) {
+                if (!ntpClient) {
+                    ntpUDP = new WiFiUDP();
+                    ntpClient = new NTPClient(*ntpUDP);
+                }
+                else {
+                    ntpClient->end();
+                }
+                ntpClient->begin();
+                ntpClient->forceUpdate();
+                Serial.println("RTC synchronized via NTP.");
+                DateTime dt = DateTime(ntpClient->getEpochTime());
+                rtc.adjust(dt);
+                dt = CONVERT_TO_LOCAL_TIME(dt);
+                Serial.printf("Set RTC current time: %04d-%02d-%02d %02d:%02d:%02d\n",
+                    dt.year(), dt.month(), dt.day(),
+                    dt.hour(), dt.minute(), dt.second());
+            }
+        }
         sprayScheduler.update();
         }, &mainScheduler, true);
 
@@ -177,6 +208,12 @@ void setupTask() {
             Serial.print("IP address: ");
             Serial.println(WiFi.localIP());
 
+            if (isWifiInetConnected()) {
+                taskRequestWifiInet->setInterval(2000);
+                taskRequestWifiInet->enable();
+                taskRequestWifiInet->forceNextIteration();
+            }
+
             if (wifiConfig.mode == MQTT) {
                 setupMqtt();
             }
@@ -198,6 +235,25 @@ void setupTask() {
         }
         }, &mainScheduler, false);
 
+    taskRequestWifiInet = new Task(2000, TASK_FOREVER, []() {
+        taskRequestWifiInet->setInterval(2000);
+        if (WiFi.status() == WL_CONNECTED) {
+            if (!isWifiInetConnected()) {
+                Serial.println("Not connected to WiFi INET Free.");
+                taskRequestWifiInet->setInterval(5 * 60 * 1000); // 5 minutes
+                return;
+            }
+            
+            Serial.println("Connected to WiFi INET Free. Logging in...");
+            if (logoutWifiInet() && loginWifiInet()) {
+                Serial.println("Successfully logged into WiFi Internet gateway.");
+                taskRequestWifiInet->setInterval(5 * 60 * 1000); // 5 minutes
+            }
+            else {
+                Serial.println("Failed to log into WiFi Internet gateway.");
+            }
+        }
+        }, &mainScheduler, false);
 }
 
 
@@ -310,14 +366,8 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
      * response: none
      */
     if (command == "sprayNow") {
-        uint32_t duration = doc["duration"] | 0;
-        DateTime timestamp;
-        const DateTime* tsPtr = nullptr;
-        if (rtc.isrunning()) {
-            timestamp = rtc.now();
-            tsPtr = &timestamp;
-        }
-        sprayController.on(duration, SPRAY_REASON_MANUAL, tsPtr);
+        uint32_t duration = doc["duration"] | 1000;
+        sprayScheduler.sprayNow(duration, SPRAY_REASON_MANUAL);
         Serial.printf("Spraying for %u ms\n", duration);
     }
 
@@ -625,16 +675,19 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         responseDoc["command"] = "getHomeDataResponse";
         responseDoc["temperature"] = 29.3; //TODO
         responseDoc["humidity"] = 75.5; //TODO
-        responseDoc["lastSprayHourTime"] = sprayScheduler.getLastSprayInfo().timestamp.hour();
-        responseDoc["lastSprayMinuteTime"] = sprayScheduler.getLastSprayInfo().timestamp.minute();
-        responseDoc["lastSprayDurationMs"] = sprayScheduler.getLastSprayInfo().durationMs;
-        responseDoc["lastSprayReason"] = static_cast<uint8_t>(sprayScheduler.getLastSprayInfo().reason);
-        responseDoc["nextSprayHourTime"] = sprayScheduler.getNextSprayInfo().timestamp.hour();
-        responseDoc["nextSprayMinuteTime"] = sprayScheduler.getNextSprayInfo().timestamp.minute();
-        responseDoc["nextSprayDurationMs"] = sprayScheduler.getNextSprayInfo().durationMs; // == 0 => no next spray
+
+        SprayInfo lastSprayInfo = sprayScheduler.getLastSprayInfo();
+        responseDoc["lastSprayHourTime"] = lastSprayInfo.timestamp.hour();
+        responseDoc["lastSprayMinuteTime"] = lastSprayInfo.timestamp.minute();
+        responseDoc["lastSprayDurationMs"] = lastSprayInfo.durationMs;
+        responseDoc["lastSprayReason"] = static_cast<uint8_t>(lastSprayInfo.reason);
+
+        SprayInfo nextSprayInfo = sprayScheduler.getNextSprayInfo();
+        responseDoc["nextSprayHourTime"] = nextSprayInfo.timestamp.hour();
+        responseDoc["nextSprayMinuteTime"] = nextSprayInfo.timestamp.minute();
+        responseDoc["nextSprayDurationMs"] = nextSprayInfo.durationMs; // == 0 => no next spray
 
         SprayController::SprayDataTotal sprayDataTotal = sprayController.getSprayDataTotal();
-
         responseDoc["totalSprayCount"] = sprayDataTotal.totalSpraysCount;
         responseDoc["totalSprayDuration"] = sprayDataTotal.totalSprayDuration;
 

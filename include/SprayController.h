@@ -68,7 +68,6 @@ public:
         : _pin(pin), _rtc(rtc) {
         _pathFolderLog = normalizeFolderPath(pathFolderLog);
         _pathFileNameSprayTotal = pathFileNameSprayTotal;
-        loadSprayDataTotal();
         pinMode(_pin, OUTPUT);
         digitalWrite(_pin, LOW);
     }
@@ -121,28 +120,6 @@ public:
     }
 
 private:
-    void loadSprayDataTotal() {
-        File file = LittleFS.open(_pathFileNameSprayTotal.c_str(), "r");
-        if (!file) {
-            Serial.println("No spray data total file found. Using default values.");
-            return;
-        }
-
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, file);
-        if (error) {
-            Serial.print(F("Failed to read spray data total file: "));
-            Serial.println(error.f_str());
-            file.close();
-            return;
-        }
-
-        _sprayDataTotal.totalSpraysCount = doc["totalSpraysCount"] | 0;
-        _sprayDataTotal.totalSprayDuration = doc["totalSprayDuration"] | 0;
-
-        file.close();
-    }
-
     void saveSprayDataTotal() {
         JsonDocument doc;
         doc["totalSpraysCount"] = _sprayDataTotal.totalSpraysCount;
@@ -159,6 +136,30 @@ private:
     }
 
 public:
+    void loadSprayDataTotal() {
+        Serial.print("Loading spray data total...");
+        File file = LittleFS.open(_pathFileNameSprayTotal.c_str(), "r");
+        if (!file) {
+            Serial.println(" --> No spray data total file found. Using default values.");
+            return;
+        }
+
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, file);
+        if (error) {
+            Serial.print(" ---> Failed to read spray data total file: ");
+            Serial.println(error.f_str());
+            file.close();
+            return;
+        }
+
+        _sprayDataTotal.totalSpraysCount = doc["totalSpraysCount"] | 0;
+        _sprayDataTotal.totalSprayDuration = doc["totalSprayDuration"] | 0;
+
+        file.close();
+        Serial.println(" --> Spray data total loaded.");
+    }
+
     SprayDataTotal getSprayDataTotal() {
         return _sprayDataTotal;
     }

@@ -10,7 +10,6 @@
 #include "SprayController.h"
 #include "Config.h"
 
-
 /**
  * @brief Cấu trúc một lịch phun (task).
  */
@@ -31,7 +30,7 @@ struct SprayInfo {
 
 class SprayScheduler {
 private:
-    std::vector<SprayTask> tasks;
+    std::vector<SprayTask> _tasks;
     SprayController* _spray;
 
     RTC_DS1307* _rtc;
@@ -103,7 +102,7 @@ public:
             }
 
             SprayTask task = { id, hour, minute, weekday, enabled, duration };
-            tasks.push_back(task);
+            _tasks.push_back(task);
             setTriggered(id, false);
             return task.id;
         }
@@ -122,9 +121,9 @@ public:
      * @return true nếu xóa thành công, false nếu không tìm thấy.
      */
     bool removeTask(uint8_t id) {
-        for (size_t i = 0; i < tasks.size(); ++i) {
-            if (tasks[i].id == id) {
-                tasks.erase(tasks.begin() + i);
+        for (size_t i = 0; i < _tasks.size(); ++i) {
+            if (_tasks[i].id == id) {
+                _tasks.erase(_tasks.begin() + i);
                 setTriggered(id, false);
                 return true;
             }
@@ -138,7 +137,7 @@ public:
      * @return true nếu chỉnh sửa thành công, false nếu không tìm thấy.
      */
     bool editTask(const SprayTask& newTask) {
-        for (auto& t : tasks) {
+        for (auto& t : _tasks) {
             if (t.id == newTask.id) {
                 t = newTask;
                 return true;
@@ -169,7 +168,7 @@ public:
     uint8_t getNextTaskId() const {
         for (uint8_t id = 1; id < 255; ++id) {
             bool exists = false;
-            for (const auto& t : tasks) {
+            for (const auto& t : _tasks) {
                 if (t.id == id) {
                     exists = true;
                     break;
@@ -191,10 +190,10 @@ public:
         File file = LittleFS.open(_fileNameSave.c_str(), "w");
         if (!file) return false;
 
-        uint32_t count = tasks.size();
+        uint32_t count = _tasks.size();
         file.write((uint8_t*)&count, sizeof(count));
 
-        for (auto& t : tasks) {
+        for (auto& t : _tasks) {
             file.write((uint8_t*)&t, sizeof(SprayTask));
         }
 
@@ -218,13 +217,13 @@ public:
         uint32_t count = 0;
         file.read((uint8_t*)&count, sizeof(count));
 
-        tasks.clear();
+        _tasks.clear();
         initTriggeredVector();
 
         for (uint32_t i = 0; i < count; i++) {
             SprayTask t;
             if (file.read((uint8_t*)&t, sizeof(SprayTask)) == sizeof(SprayTask)) {
-                tasks.push_back(t);
+                _tasks.push_back(t);
             }
             else {
                 Serial.println(" ---> Error reading spray schedule from file. File may be corrupted.");
@@ -247,15 +246,15 @@ public:
             return;
         }
         DateTime now = CONVERT_TO_LOCAL_TIME(_rtc->now());
-        Serial.printf("SprayScheduler: Current time %02d:%02d (minute %d)\n", now.hour(), now.minute(), now.minute());
+        Serial.printf("SprayScheduler: Current time %02d:%02d:%02d\n", now.hour(), now.minute(), now.second());
 
         if (now.minute() != _lastMinute) {
             std::fill(_triggered.begin(), _triggered.end(), false);
             _lastMinute = now.minute();
         }
 
-        for (size_t i = 0; i < tasks.size(); i++) {
-            SprayTask& t = tasks[i];
+        for (size_t i = 0; i < _tasks.size(); i++) {
+            SprayTask& t = _tasks[i];
             if (!t.enabled) continue;
 
             bool isOnceDaily = (t.weekday == 0);
@@ -283,7 +282,7 @@ public:
      * @return Con trỏ đến lịch phun, hoặc nullptr nếu không tìm thấy.
      */
     SprayTask* getTaskById(uint8_t id) {
-        for (auto& t : tasks)
+        for (auto& t : _tasks)
             if (t.id == id) return &t;
         return nullptr;
     }
@@ -300,13 +299,13 @@ public:
      */
     JsonDocument createTasksJson() {
         JsonDocument doc;
-        doc["countask"] = tasks.size();
+        doc["countask"] = _tasks.size();
         doc["sizeTask"] = sizeof(SprayTask);
 
-        if (!tasks.empty()) {
+        if (!_tasks.empty()) {
 
-            const char* rawPtr = reinterpret_cast<const char*>(tasks.data());
-            size_t rawSize = tasks.size() * sizeof(SprayTask);
+            const char* rawPtr = reinterpret_cast<const char*>(_tasks.data());
+            size_t rawSize = _tasks.size() * sizeof(SprayTask);
 
             int encodedLength = Base64.encodedLength(rawSize);
             char* encodedString = new char[encodedLength + 1];
@@ -376,9 +375,13 @@ public:
      * @param reason Lý do phun sương.
      * @param timestamp Thời gian phun (nếu có).
      */
-    void sprayNow(uint32_t duration, SprayReason reason = SPRAY_REASON_OTHER, const DateTime* timestamp = nullptr) {
-        _spray->on(duration, reason, timestamp);
-        _lastSprayInfo = { timestamp ? *timestamp : (_rtc && _rtc->isrunning() ? _rtc->now() : DateTime()), duration, reason };
+    void sprayNow(uint32_t duration, SprayReason reason = SPRAY_REASON_OTHER) {
+        DateTime timestamp;
+        if (_rtc && _rtc->isrunning()) {
+            timestamp = CONVERT_TO_LOCAL_TIME(_rtc->now());
+        }
+        _spray->on(duration, reason, &timestamp);
+        _lastSprayInfo = { timestamp, duration, reason };
     }
 
     /**
@@ -390,21 +393,47 @@ public:
     }
 
     SprayInfo getNextSprayInfo() const {
-        DateTime now = _rtc->isrunning() ? _rtc->now() : DateTime();
-        for (const auto& t : tasks) {
+        DateTime now = _rtc->isrunning() ? CONVERT_TO_LOCAL_TIME(_rtc->now()) : DateTime();
+        DateTime closestTime;
+        uint16_t duration = 0;
+        SprayReason reason = SPRAY_REASON_OTHER;
+        bool found = false;
+
+        for (const auto& t : _tasks) {
             if (!t.enabled) continue;
 
             bool isOnceDaily = (t.weekday == 0);
-            bool dayMatch = isOnceDaily || (t.weekday & (1 << now.dayOfTheWeek()));
-            DateTime scheduledTime(now.year(), now.month(), now.day(), t.hour, t.minute, 0);
 
-            if (scheduledTime > now && dayMatch) {
-                return { scheduledTime, t.duration, SPRAY_REASON_SCHEDULED };
+            for (int dayOffset = 0; dayOffset < 7; ++dayOffset) {
+                int dayOfWeek = (now.dayOfTheWeek() + dayOffset) % 7;
+                bool dayMatch = isOnceDaily || (t.weekday & (1 << dayOfWeek));
+                if (!dayMatch) continue;
+
+                DateTime scheduledTime = DateTime(
+                    now.year(),
+                    now.month(),
+                    now.day(),
+                    t.hour,
+                    t.minute,
+                    0
+                ) + TimeSpan(dayOffset, 0, 0, 0);
+
+                if (scheduledTime <= now) continue;
+                if (!found || scheduledTime < closestTime) {
+                    closestTime = scheduledTime;
+                    duration = t.duration;
+                    reason = SPRAY_REASON_SCHEDULED;
+                    found = true;
+                }
             }
         }
+
+        if (found) {
+            return { closestTime, duration, reason };
+        }
+
         return { DateTime(), 0, SPRAY_REASON_OTHER };
     }
-
 };
 
 #endif
