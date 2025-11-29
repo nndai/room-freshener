@@ -14,8 +14,6 @@ import kotlinx.coroutines.SupervisorJob
 
 object DeviceRepositoryProvider {
 
-    private const val DEFAULT_WS_URL = "ws://192.168.137.1:82"
-
     @Volatile
     private var repository: DeviceControlRepository? = null
 
@@ -28,7 +26,9 @@ object DeviceRepositoryProvider {
     }
 
     private fun buildRepository(): DeviceControlRepository {
-        val websocketChannel = EspWebSocketClient(DEFAULT_WS_URL)
+        val websocketChannel = EspWebSocketClient(
+            baseUrl = BuildConfig.WEBSOCKET_URL,
+        )
         val blynkChannel = BlynkHttpChannel(
             token = BuildConfig.BLYNK_TOKEN,
             scope = appScope
@@ -38,7 +38,8 @@ object DeviceRepositoryProvider {
             port = BuildConfig.MQTT_PORT,
             username = BuildConfig.MQTT_USERNAME,
             password = BuildConfig.MQTT_PASSWORD,
-            topic = BuildConfig.MQTT_TOPIC_COMMAND,
+            topicSend = BuildConfig.MQTT_TOPIC_SEND,
+            topicReceive = BuildConfig.MQTT_TOPIC_RECEIVE,
             scope = appScope
         )
         val hybrid = HybridDeviceChannel(

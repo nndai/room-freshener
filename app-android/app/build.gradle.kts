@@ -14,7 +14,9 @@ val mqttHost = localProps.getProperty(
 val mqttPort = localProps.getProperty("MQTT_PORT", "8883").toIntOrNull() ?: 8883
 val mqttUsername = localProps.getProperty("MQTT_USERNAME", "")
 val mqttPassword = localProps.getProperty("MQTT_PASSWORD", "")
-val mqttTopic = localProps.getProperty("MQTT_TOPIC_COMMAND", "")
+val mqttTopicSend = localProps.getProperty("MQTT_TOPIC_SEND", "")
+val mqttTopicReceive = localProps.getProperty("MQTT_TOPIC_RECEIVE", "")
+val websocketUrl = localProps.getProperty("WEBSOCKET_URL", "")
 
 android {
     namespace = "com.iot.roomfreshener"
@@ -33,7 +35,9 @@ android {
         buildConfigField("int", "MQTT_PORT", mqttPort.toString())
         buildConfigField("String", "MQTT_USERNAME", "\"$mqttUsername\"")
         buildConfigField("String", "MQTT_PASSWORD", "\"$mqttPassword\"")
-        buildConfigField("String", "MQTT_TOPIC_COMMAND", "\"$mqttTopic\"")
+        buildConfigField("String", "MQTT_TOPIC_SEND", "\"$mqttTopicSend\"")
+        buildConfigField("String", "MQTT_TOPIC_RECEIVE", "\"$mqttTopicReceive\"")
+        buildConfigField("String", "WEBSOCKET_URL", "\"$websocketUrl\"")
     }
 
     buildTypes {

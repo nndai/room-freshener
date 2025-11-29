@@ -36,7 +36,8 @@ class MqttDeviceChannel(
     private val port: Int,
     private val username: String,
     private val password: String,
-    private val topic: String,
+    private val topicSend: String,
+    private val topicReceive: String,
     private val scope: CoroutineScope,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : DeviceChannel {
@@ -63,7 +64,7 @@ class MqttDeviceChannel(
         override fun connectComplete(reconnect: Boolean, serverURI: String?) {
             Log.d(TAG, "connectComplete() reconnect=$reconnect uri=$serverURI")
             scope.launch(dispatcher) {
-                runCatching { client?.subscribe(topic, 1) }
+                runCatching { client?.subscribe(topicReceive, 1) }
                 requestHandshake()
             }
         }
@@ -87,7 +88,7 @@ class MqttDeviceChannel(
 
     override fun start() {
         if (!isConfigValid()) {
-            Log.e(TAG, "start() invalid config host=$host port=$port topic=$topic")
+            Log.e(TAG, "start() invalid config host=$host port=$port topic=$topicSend")
             _state.value = DeviceConnectionState.Failed(channelKind, IllegalStateException("Missing MQTT config"))
             return
         }
@@ -95,7 +96,7 @@ class MqttDeviceChannel(
             Log.d(TAG, "start() ignored, already connecting/connected")
             return
         }
-        Log.d(TAG, "start() connecting to $host:$port topic=$topic")
+        Log.d(TAG, "start() connecting to $host:$port topic=$topicSend")
         connectJob = scope.launch(dispatcher) {
             runConnect()
         }
@@ -119,7 +120,7 @@ class MqttDeviceChannel(
         return withContext(dispatcher) {
             runCatching {
                 val payload = raw.toByteArray(Charsets.UTF_8)
-                current.publish(topic, payload, 1, false)
+                current.publish(topicSend, payload, 1, false)
                 Log.d(TAG, "send() publish ok payload=${raw.take(128)}")
                 true
             }.getOrElse {
@@ -137,24 +138,28 @@ class MqttDeviceChannel(
             val mqttClient = MqttClient(uri, buildClientId(), MemoryPersistence()).apply {
                 setCallback(callback)
             }
+            client = mqttClient
             val options = buildOptions()
             mqttClient.connect(options)
-            mqttClient.subscribe(topic, 1)
-            client = mqttClient
+            mqttClient.subscribe(topicReceive, 1)
             Log.d(TAG, "runConnect() connected, awaiting handshake")
+            requestHandshake()
         } catch (ex: Exception) {
             Log.e(TAG, "runConnect() failed", ex)
             _state.value = DeviceConnectionState.Failed(channelKind, ex)
             disconnectInternal(ex.message, emitState = false)
         } finally {
             connectJob = null
+            if (client?.isConnected != true) {
+                client = null
+            }
         }
     }
 
     private suspend fun disconnectInternal(reason: String?, emitState: Boolean = true) {
         val current = client
         if (current != null) {
-            runCatching { current.unsubscribe(topic) }
+            runCatching { current.unsubscribe(topicReceive) }
             runCatching { current.disconnectForcibly(1000, 1000) }
             runCatching { current.close() }
         }
@@ -241,13 +246,13 @@ class MqttDeviceChannel(
     }
 
     private fun isConfigValid(): Boolean {
-        return host.isNotBlank() && topic.isNotBlank() && port > 0
+        return host.isNotBlank() && topicSend.isNotBlank() && port > 0
     }
 
     private suspend fun publishInternal(raw: String): Boolean {
         val current = client ?: return false
         return runCatching {
-            current.publish(topic, raw.toByteArray(Charsets.UTF_8), 1, false)
+            current.publish(topicSend, raw.toByteArray(Charsets.UTF_8), 1, false)
             Log.v(TAG, "publishInternal() sent payload=${raw.take(128)}")
             true
         }.getOrElse {
