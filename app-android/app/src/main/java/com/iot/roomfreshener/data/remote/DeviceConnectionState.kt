@@ -13,6 +13,5 @@ sealed interface DeviceConnectionState {
 
 enum class ChannelKind {
     WEBSOCKET,
-    BLYNK,
     MQTT
 }

@@ -1,7 +1,6 @@
 package com.iot.roomfreshener.data.di
 
 import com.iot.roomfreshener.BuildConfig
-import com.iot.roomfreshener.data.remote.BlynkHttpChannel
 import com.iot.roomfreshener.data.remote.ChannelKind
 import com.iot.roomfreshener.data.remote.DeviceCommandDataSource
 import com.iot.roomfreshener.data.remote.EspWebSocketClient
@@ -29,10 +28,6 @@ object DeviceRepositoryProvider {
         val websocketChannel = EspWebSocketClient(
             baseUrl = BuildConfig.WEBSOCKET_URL,
         )
-        val blynkChannel = BlynkHttpChannel(
-            token = BuildConfig.BLYNK_TOKEN,
-            scope = appScope
-        )
         val mqttChannel = MqttDeviceChannel(
             host = BuildConfig.MQTT_HOST,
             port = BuildConfig.MQTT_PORT,
@@ -45,7 +40,6 @@ object DeviceRepositoryProvider {
         val hybrid = HybridDeviceChannel(
             listOf(
                 HybridDeviceChannel.ChannelEntry(ChannelKind.WEBSOCKET, websocketChannel),
-                HybridDeviceChannel.ChannelEntry(ChannelKind.BLYNK, blynkChannel),
                 HybridDeviceChannel.ChannelEntry(ChannelKind.MQTT, mqttChannel)
             ),
             appScope

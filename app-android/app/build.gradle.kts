@@ -6,7 +6,6 @@ plugins {
 }
 
 val localProps = gradleLocalProperties(rootDir, providers)
-val blynkToken = localProps.getProperty("BLYNK_TOKEN", "")
 val mqttHost = localProps.getProperty(
     "MQTT_HOST",
     ""
@@ -30,7 +29,6 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "BLYNK_TOKEN", "\"$blynkToken\"")
         buildConfigField("String", "MQTT_HOST", "\"$mqttHost\"")
         buildConfigField("int", "MQTT_PORT", mqttPort.toString())
         buildConfigField("String", "MQTT_USERNAME", "\"$mqttUsername\"")

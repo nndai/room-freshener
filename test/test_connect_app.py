@@ -24,7 +24,7 @@ wifi_config = {
     "passwordAp": "12345678",
     "ssid": "MyWiFi",
     "password": "mypassword",
-    "modeConnect": 0  # 0: WEBSOCKET, 1: BLYNK, 2: MQTT
+    "modeConnect": 0  # 0: WEBSOCKET, 1: MQTT
 }
 
 # 3. Dữ liệu thống kê (Home Data)
@@ -157,7 +157,7 @@ async def handler(websocket):
                     mode = doc.get("modeConnect", 0)
 
                     # Logic validate giống C++
-                    if len(ssidAp) > 32 or len(passAp) > 64 or len(ssid) > 32 or len(pwd) > 64 or mode > 2:
+                    if len(ssidAp) > 32 or len(passAp) > 64 or len(ssid) > 32 or len(pwd) > 64 or mode > 1:
                         print("-> [Lỗi] Config Wifi không hợp lệ")
                         response = {
                             "command": "setWiFiConfigResponse",

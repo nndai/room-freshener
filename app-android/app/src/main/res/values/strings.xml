@@ -4,7 +4,6 @@
         Nhấn nút + để tạo lịch xịt đầu tiên.</string>
     <string name="task_loading_placeholder">Đang tải danh sách lịch phun...</string>
     <string name="mode_websocket">Trực tiếp (AP)</string>
-    <string name="mode_blynk">Blynk Cloud</string>
     <string name="mode_mqtt">MQTT TLS</string>
     <string name="setting_validation_mode">Vui lòng chọn mode kết nối.</string>
 </resources>

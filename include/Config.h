@@ -7,7 +7,6 @@
 
 enum ModeConnect {
     WEBSOCKET,
-    BLYNK,
     MQTT,
 };
 
@@ -47,11 +46,6 @@ struct WiFiConfig {
 
 #define MQTT_MAX_PACKET_SIZE_OVERRIDE 3000
 
-#define BLYNK_TEMPLATE_ID "..."
-#define BLYNK_TEMPLATE_NAME "..."
-#define BLYNK_AUTH_TOKEN "..."
-#define NO_GLOBAL_BLYNK
-
 #define _TASK_SLEEP_ON_IDLE_RUN
 #define _TASK_STD_FUNCTION
 
@@ -81,6 +75,9 @@ void loadWiFiConfig(WiFiConfig& wifiConfig) {
     wifiConfig.ssid = doc["ssid"] | "";
     wifiConfig.password = doc["password"] | "";
 
+    if (wifiConfig.mode != WEBSOCKET && wifiConfig.mode != MQTT) {
+        wifiConfig.mode = WEBSOCKET;
+    }
     Serial.println(" ---> success.");
     file.close();
 }

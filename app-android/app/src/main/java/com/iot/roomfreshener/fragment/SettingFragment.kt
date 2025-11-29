@@ -167,7 +167,6 @@ class SettingFragment : Fragment() {
     private fun modeLabel(mode: ModeConnect): String {
         return when (mode) {
             ModeConnect.WEBSOCKET -> getString(R.string.mode_websocket)
-            ModeConnect.BLYNK -> getString(R.string.mode_blynk)
             ModeConnect.MQTT -> getString(R.string.mode_mqtt)
         }
     }

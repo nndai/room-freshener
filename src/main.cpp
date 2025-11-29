@@ -11,7 +11,6 @@
 #include "LedController.h"
 #include "SprayScheduler.h"
 #include <TaskScheduler.h>
-#include <BlynkSimpleEsp8266.h>
 #include <PubSubClient.h>
 
 
@@ -25,9 +24,6 @@ WiFiConfig wifiConfig = {
 ADC_MODE(ADC_VCC);
 
 WebSocketsServer* websocket = nullptr;
-WiFiClient* wifiBlynkClient = nullptr;
-BlynkArduinoClient* blynkTransport = nullptr;
-BlynkWifi* blynk = nullptr;
 
 WiFiClientSecure* wifiMqttClient = nullptr;
 PubSubClient* mqttClient = nullptr;
@@ -45,18 +41,15 @@ Scheduler mainScheduler;
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
 void setupTask();
 void setupWebSocket();
-void setupBlynk();
 void setupMqtt();
 void setupConnection();
 void handleMessage(uint8_t num, uint8_t* payload, uint32_t length);
 void printEspInfo();
 
-
 //======================== Tasks =============================
 Task* taskUpdateSprayScheduler;
 Task* taskUpdateLed;
 Task* taskButtonCheck;
-Task* taskConnectToBlynk;
 Task* taskConnectToMqtt;
 Task* taskConnectWiFi;
 Task* taskLoopConnection;
@@ -67,7 +60,7 @@ Task* taskLoopConnection;
 void setup() {
     led.on();
     Serial.begin(74880);
-    while(!Serial){
+    while (!Serial) {
         delay(1);
     }
     printEspInfo();
@@ -79,7 +72,7 @@ void setup() {
     if (!rtc.begin(&Wire)) {
         Serial.println("Failed to initialize RTC.");
     }
-
+    
     setupTask();
     loadWiFiConfig(wifiConfig);
 
@@ -167,15 +160,6 @@ void setupTask() {
         button.tick();
         }, &mainScheduler, true);
 
-
-    taskConnectToBlynk = new Task(200, TASK_FOREVER, []() {
-        if (blynk && blynk->connect(1000)) {
-            Serial.println("Connected to Blynk Cloud!");
-            taskConnectToBlynk->disable();
-            taskLoopConnection->enable();
-        }
-        }, &mainScheduler, false);
-
     taskConnectToMqtt = new Task(2000, TASK_FOREVER, []() {
         String clientID = "ESPClient-";
         clientID += String(random(0xffff), HEX);
@@ -193,10 +177,7 @@ void setupTask() {
             Serial.print("IP address: ");
             Serial.println(WiFi.localIP());
 
-            if (wifiConfig.mode == BLYNK) {
-                setupBlynk();
-            }
-            else if (wifiConfig.mode == MQTT) {
+            if (wifiConfig.mode == MQTT) {
                 setupMqtt();
             }
             taskConnectWiFi->disable();
@@ -215,9 +196,6 @@ void setupTask() {
                 taskLoopConnection->disable();
             }
         }
-        else if (blynk) {
-            blynk->run();
-        }
         }, &mainScheduler, false);
 
 }
@@ -225,18 +203,6 @@ void setupTask() {
 
 void setupWebSocket() {
     Serial.println("Setting up WebSocket server...");
-    if (blynk) {
-        Serial.println("Disconnecting from Blynk Cloud...");
-        blynk->disconnect();
-        delete blynk;
-        if (blynkTransport)
-            delete blynkTransport;
-        if (wifiBlynkClient)
-            delete wifiBlynkClient;
-        blynk = nullptr;
-        blynkTransport = nullptr;
-        wifiBlynkClient = nullptr;
-    }
     if (mqttClient) {
         Serial.println("Disconnecting from MQTT Broker...");
         mqttClient->disconnect();
@@ -256,41 +222,12 @@ void setupWebSocket() {
     taskLoopConnection->enable();
 }
 
-void setupBlynk() {
-    Serial.println("Setting up Blynk connection...");
-    if (websocket) {
-        websocket->close();
-        delete websocket;
-        websocket = nullptr;
-    }
-
-    if (!blynk) {
-        wifiBlynkClient = new WiFiClient();
-        blynkTransport = new BlynkArduinoClient(*wifiBlynkClient);
-        blynk = new BlynkWifi(*blynkTransport);
-        blynk->config(BLYNK_AUTH_TOKEN);
-        Serial.println("Connecting to Blynk Cloud...");
-        taskConnectToBlynk->enable();
-    }
-}
-
 void setupMqtt() {
     Serial.println("Setting up MQTT connection...");
     if (websocket) {
         websocket->close();
         delete websocket;
         websocket = nullptr;
-    }
-    if (blynk) {
-        blynk->disconnect();
-        delete blynk;
-        if (blynkTransport)
-            delete blynkTransport;
-        if (wifiBlynkClient)
-            delete wifiBlynkClient;
-        blynk = nullptr;
-        blynkTransport = nullptr;
-        wifiBlynkClient = nullptr;
     }
 
     if (!mqttClient) {
@@ -320,7 +257,7 @@ void setupConnection() {
     }
     else {
         WiFi.mode(WIFI_STA);
-        if( wifiConfig.password.length() == 0 ) {
+        if (wifiConfig.password.length() == 0) {
             WiFi.begin(wifiConfig.ssid.c_str());
         }
         else {
@@ -335,10 +272,6 @@ void setupConnection() {
 void sendMessage(uint8_t num, String& message) {
     if (websocket) {
         websocket->sendTXT(num, message);
-    }
-    else if (blynk) {
-        blynk->virtualWrite(V3, message);
-        blynk->virtualWrite(V2, 1);
     }
     else if (mqttClient) {
         if (!mqttClient->publish(MQTT_TOPIC_SEND, message.c_str())) {
@@ -650,7 +583,7 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
      */
     else if (command == "setTime") {
         uint32_t timestamp = doc["timestamp"] | 0;
-        if( timestamp == 0 ) {
+        if (timestamp == 0) {
             Serial.println("Invalid timestamp.");
             String responseStr = "{\"command\":\"setTimeResponse\",\"status\":false,\"message\":\"Invalid timestamp.\"}";
             sendMessage(num, responseStr);
@@ -699,9 +632,9 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         responseDoc["nextSprayHourTime"] = sprayScheduler.getNextSprayInfo().timestamp.hour();
         responseDoc["nextSprayMinuteTime"] = sprayScheduler.getNextSprayInfo().timestamp.minute();
         responseDoc["nextSprayDurationMs"] = sprayScheduler.getNextSprayInfo().durationMs; // == 0 => no next spray
-        
+
         SprayController::SprayDataTotal sprayDataTotal = sprayController.getSprayDataTotal();
-        
+
         responseDoc["totalSprayCount"] = sprayDataTotal.totalSpraysCount;
         responseDoc["totalSprayDuration"] = sprayDataTotal.totalSprayDuration;
 
@@ -730,16 +663,16 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
      *   "message":"WiFi configuration updated. Rebooting..."
      * }
      */
-    else if(command == "setWiFiConfig") {
+    else if (command == "setWiFiConfig") {
         String ssidAp = doc["ssidAp"] | "";
         String passwordAp = doc["passwordAp"] | "";
         String ssid = doc["ssid"] | "";
         String password = doc["password"] | "";
         uint8_t mode = doc["modeConnect"] | 0;
 
-        if(ssidAp.length() > 32 || passwordAp.length() > 64 ||
-           ssid.length() > 32 || password.length() > 64 ||
-           mode > MQTT) {
+        if (ssidAp.length() > 32 || passwordAp.length() > 64 ||
+            ssid.length() > 32 || password.length() > 64 ||
+            mode > MQTT) {
             Serial.println("Invalid WiFi configuration parameters.");
             String responseStr = "{\"command\":\"setWiFiConfigResponse\",\"status\":false,\"message\":\"Invalid parameters.\"}";
             sendMessage(num, responseStr);
@@ -747,7 +680,7 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         }
 
         // If SSID/AP is empty, keep the old value
-        if(ssidAp.length() < 1) {
+        if (ssidAp.length() < 1) {
             ssidAp = wifiConfig.ssidAp;
             passwordAp = wifiConfig.passwordAp;
         }
@@ -816,22 +749,5 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
     default:
         break;
     }
-}
-
-/*
-    V0(int) trạng online/offline, 1 là online, 0 là offline
-    V1(string) dữ liệu từ app -> esp
-    V2(int) kiểm tra có dữ liệu từ esp gửi lên app, 1 là có dữ liệu, 0 là không có
-    V3(string) dữ liệu từ esp gửi lên app
-*/
-
-BLYNK_WRITE(V0) {
-    Serial.println("pong");
-    blynk->virtualWrite(V0, 1);
-}
-
-BLYNK_WRITE(V1) {
-    uint8_t* payload = (uint8_t*)param.asString();
-    handleMessage(255, payload, strlen((char*)payload));
 }
 

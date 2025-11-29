@@ -16,8 +16,7 @@ data class WifiConfigPayload(
  */
 enum class ModeConnect(val value: Int) {
     WEBSOCKET(0),
-    BLYNK(1),
-    MQTT(2);
+    MQTT(1);
 
     companion object {
         fun fromValue(value: Int): ModeConnect {
