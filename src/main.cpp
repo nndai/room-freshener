@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "Config.h"
+#include <Wire.h>
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
@@ -21,6 +22,7 @@ WiFiConfig wifiConfig = {
     "",
     ""
 };
+ADC_MODE(ADC_VCC);
 
 WebSocketsServer* websocket = nullptr;
 WiFiClient* wifiBlynkClient = nullptr;
@@ -46,7 +48,8 @@ void setupWebSocket();
 void setupBlynk();
 void setupMqtt();
 void setupConnection();
-void handleMessage(uint8_t num, uint8_t* payload);
+void handleMessage(uint8_t num, uint8_t* payload, uint32_t length);
+void printEspInfo();
 
 
 //======================== Tasks =============================
@@ -63,9 +66,19 @@ Task* taskLoopConnection;
 //========================= Setup & Loop ======================
 void setup() {
     led.on();
-    Serial.begin(115200);
+    Serial.begin(74880);
+    while(!Serial){
+        delay(1);
+    }
+    printEspInfo();
+
     LittleFS.begin();
-    LittleFS.format(); // Uncomment this line to format LittleFS on first run
+    //LittleFS.format(); // Uncomment this line to format LittleFS on first run
+
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+    if (!rtc.begin(&Wire)) {
+        Serial.println("Failed to initialize RTC.");
+    }
 
     setupTask();
     loadWiFiConfig(wifiConfig);
@@ -74,7 +87,7 @@ void setup() {
 
     setupConnection();
 
-    led.blink(2, 500, 2000);
+    led.blink(3, 50, 5000);
 }
 
 void loop() {
@@ -83,13 +96,70 @@ void loop() {
 
 //=============================================================
 
+void printBanner() {
+    Serial.println("  _____");
+    Serial.println(" |  __ \\");
+    Serial.println(" | |__) |___   ___  _ __ ___");
+    Serial.println(" |  _  // _ \\ / _ \\| '_ ` _ \\");
+    Serial.println(" | | \\ \\ (_) | (_) | | | | | |");
+    Serial.println(" |_|__\\_\\___/ \\___/|_| |_| |_|");
+    Serial.println(" |  ____|           | |");
+    Serial.println(" | |__ _ __ ___  ___| |__   ___ _ __   ___ _ __ ");
+    Serial.println(" |  __| '__/ _ \\/ __| '_ \\ / _ \\ '_ \\ / _ \\ '__|");
+    Serial.println(" | |  | | |  __/\\__ \\ | | |  __/ | | |  __/ |   ");
+    Serial.print(" |_|  |_|  \\___||___/_| |_|\\___|_| |_|\\___|_| v");
+    Serial.println(VERSION);
+}
+
+String getEspInfo() {
+    String info;
+
+    info += "ESP Information:\n";
+
+    info += "Chip ID: " + String(ESP.getChipId()) + "\n";
+    info += "Core Version: " + String(ESP.getCoreVersion()) + "\n";
+    info += "SDK Version: " + String(ESP.getSdkVersion()) + "\n";
+
+    info += "CPU Frequency: " + String(ESP.getCpuFreqMHz()) + " MHz\n";
+
+    info += "Flash Chip ID: 0x" + String(ESP.getFlashChipId(), HEX) + "\n";
+    info += "Flash Chip Size: " + String(ESP.getFlashChipSize() / 1024) + " KB\n";
+    info += "Flash Real Size: " + String(ESP.getFlashChipRealSize() / 1024) + " KB\n";
+    info += "Flash Chip Speed: " + String(ESP.getFlashChipSpeed() / 1000000) + " MHz\n";
+    info += "Flash Mode: " + String(ESP.getFlashChipMode()) + "\n";
+
+    info += "Free Heap: " + String(ESP.getFreeHeap()) + " bytes\n";
+    info += "Heap Fragmentation: " + String(ESP.getHeapFragmentation()) + "%\n";
+    info += "Max Free Block: " + String(ESP.getMaxFreeBlockSize()) + " bytes\n";
+
+    info += "Sketch Size: " + String(ESP.getSketchSize() / 1024) + " KB\n";
+    info += "Free Sketch Space: " + String(ESP.getFreeSketchSpace() / 1024) + " KB\n";
+    info += "Sketch MD5: " + String(ESP.getSketchMD5()) + "\n";
+
+    info += "Reset Reason: " + String(ESP.getResetReason()) + "\n";
+    info += "Boot Mode: " + String(ESP.getBootMode()) + "\n";
+
+    info += "Vcc: " + String(ESP.getVcc()) + " mV\n";
+
+    return info;
+}
+
+void printEspInfo() {
+    Serial.println("\n-----------------------");
+    printBanner();
+    Serial.println();
+    Serial.println(getEspInfo());
+    Serial.println("-----------------------\n");
+}
+
 
 void setupTask() {
+    Serial.println("Setting up tasks...");
     taskUpdateSprayScheduler = new Task(2000, TASK_FOREVER, []() {
         sprayScheduler.update();
         }, &mainScheduler, true);
 
-    taskUpdateLed = new Task(50, TASK_FOREVER, []() {
+    taskUpdateLed = new Task(10, TASK_FOREVER, []() {
         led.update();
         }, &mainScheduler, true);
 
@@ -111,7 +181,7 @@ void setupTask() {
         clientID += String(random(0xffff), HEX);
         if (mqttClient && mqttClient->connect(clientID.c_str(), TLS_MQTT_USERNAME, TLS_MQTT_PASSWORD)) {
             Serial.println("Connected to MQTT Broker!");
-            mqttClient->subscribe(MQTT_TOPIC_COMMAND);
+            mqttClient->subscribe(MQTT_TOPIC_RECEIVE);
             taskConnectToMqtt->disable();
             taskLoopConnection->enable();
         }
@@ -122,7 +192,6 @@ void setupTask() {
             Serial.println("Connected to WiFi!");
             Serial.print("IP address: ");
             Serial.println(WiFi.localIP());
-            Serial.println("Connecting to Blynk Cloud...");
 
             if (wifiConfig.mode == BLYNK) {
                 setupBlynk();
@@ -141,6 +210,7 @@ void setupTask() {
         else if (mqttClient) {
             mqttClient->loop();
             if (!mqttClient->connected()) {
+                Serial.println("MQTT Broker disconnected. Reconnecting...");
                 taskConnectToMqtt->enable();
                 taskLoopConnection->disable();
             }
@@ -154,7 +224,9 @@ void setupTask() {
 
 
 void setupWebSocket() {
+    Serial.println("Setting up WebSocket server...");
     if (blynk) {
+        Serial.println("Disconnecting from Blynk Cloud...");
         blynk->disconnect();
         delete blynk;
         if (blynkTransport)
@@ -166,6 +238,7 @@ void setupWebSocket() {
         wifiBlynkClient = nullptr;
     }
     if (mqttClient) {
+        Serial.println("Disconnecting from MQTT Broker...");
         mqttClient->disconnect();
         delete mqttClient;
         if (wifiMqttClient)
@@ -178,12 +251,13 @@ void setupWebSocket() {
         websocket = new WebSocketsServer(WEBSOCKET_PORT);
         websocket->begin();
         websocket->onEvent(webSocketEvent);
+        Serial.println("WebSocket server started.");
     }
-
     taskLoopConnection->enable();
 }
 
 void setupBlynk() {
+    Serial.println("Setting up Blynk connection...");
     if (websocket) {
         websocket->close();
         delete websocket;
@@ -195,11 +269,13 @@ void setupBlynk() {
         blynkTransport = new BlynkArduinoClient(*wifiBlynkClient);
         blynk = new BlynkWifi(*blynkTransport);
         blynk->config(BLYNK_AUTH_TOKEN);
+        Serial.println("Connecting to Blynk Cloud...");
         taskConnectToBlynk->enable();
     }
 }
 
 void setupMqtt() {
+    Serial.println("Setting up MQTT connection...");
     if (websocket) {
         websocket->close();
         delete websocket;
@@ -221,20 +297,23 @@ void setupMqtt() {
         wifiMqttClient = new WiFiClientSecure();
         wifiMqttClient->setInsecure();
         mqttClient = new PubSubClient(*wifiMqttClient);
+        mqttClient->setBufferSize(MQTT_MAX_PACKET_SIZE_OVERRIDE);
         mqttClient->setServer(TLS_MQTT_URL, TLS_MQTT_PORT);
         mqttClient->setCallback([](char* topic, uint8_t* payload, unsigned int length) {
-            handleMessage(254, payload);
+            handleMessage(254, payload, length);
             });
-
+        Serial.println("Connecting to MQTT Broker...");
+        taskConnectToMqtt->enable();
     }
 }
 
 
 void setupConnection() {
+    Serial.println("Setting up connection...");
     if (wifiConfig.mode == WEBSOCKET) {
         WiFi.mode(WIFI_AP);
         WiFi.softAP(wifiConfig.ssidAp.c_str(), wifiConfig.passwordAp.c_str());
-        Serial.println("Access Point đã được kích hoạt!");
+        Serial.println("Access Point has been activated!");
         Serial.print("SSID: "); Serial.println(wifiConfig.ssidAp);
         Serial.print("IPAP: "); Serial.println(WiFi.softAPIP());
         setupWebSocket();
@@ -247,7 +326,7 @@ void setupConnection() {
         else {
             WiFi.begin(wifiConfig.ssid.c_str(), wifiConfig.password.c_str());
         }
-        Serial.println("Kết nối tới WiFi...");
+        Serial.println("Connecting to WiFi...");
         taskConnectWiFi->enable();
     }
 }
@@ -262,11 +341,16 @@ void sendMessage(uint8_t num, String& message) {
         blynk->virtualWrite(V2, 1);
     }
     else if (mqttClient) {
-        mqttClient->publish(MQTT_TOPIC_COMMAND, message.c_str());
+        if (!mqttClient->publish(MQTT_TOPIC_SEND, message.c_str())) {
+            Serial.println("Failed to send MQTT message.");
+        }
     }
 }
 
-void handleMessage(uint8_t num, uint8_t* payload) {
+void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
+    payload[length] = '\0'; // Ensure null-terminated string
+    Serial.printf("[%u] Received Text: %s\n", num, payload);
+
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, payload);
     if (error) {
@@ -566,6 +650,12 @@ void handleMessage(uint8_t num, uint8_t* payload) {
      */
     else if (command == "setTime") {
         uint32_t timestamp = doc["timestamp"] | 0;
+        if( timestamp == 0 ) {
+            Serial.println("Invalid timestamp.");
+            String responseStr = "{\"command\":\"setTimeResponse\",\"status\":false,\"message\":\"Invalid timestamp.\"}";
+            sendMessage(num, responseStr);
+            return;
+        }
         rtc.adjust(DateTime(timestamp));
         Serial.printf("RTC time set to %u\n", timestamp);
         String responseStr = "{\"command\":\"setTimeResponse\",\"status\":true,\"message\":\"RTC time updated. Current time: "
@@ -678,6 +768,26 @@ void handleMessage(uint8_t num, uint8_t* payload) {
         ESP.restart();
     }
 
+    /**
+     * Xử lý lệnh lấy thông tin ESP
+     * example:
+     * received JSON:
+     * {
+     *   "command": "getEspInfo"
+     * }
+     *
+     * response JSON:
+     * {
+     *   "command": "getEspInfoResponse",
+     *   "info": "ESP Information:..."
+     * }
+     */
+    else if (command == "getEspInfo") {
+        String espInfo = getEspInfo();
+        String responseStr = "{\"command\":\"getEspInfoResponse\",\"info\":\"" + espInfo + "\"}";
+        sendMessage(num, responseStr);
+    }
+
     else {
         Serial.printf("Unknown command: %s\n", command.c_str());
         String responseStr = "{\"command\":\"unknownCommandResponse\",\"status\":false,\"message\":\"Unknown command.\"}";
@@ -696,8 +806,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         break;
 
     case WStype_TEXT:
-        Serial.printf("[%u] Received Text: %s\n", num, payload);
-        handleMessage(num, payload);
+        handleMessage(num, payload, length);
         break;
 
     case WStype_BIN:
@@ -723,7 +832,6 @@ BLYNK_WRITE(V0) {
 
 BLYNK_WRITE(V1) {
     uint8_t* payload = (uint8_t*)param.asString();
-    Serial.printf("Blynk Receive Text: %s\n", payload);
-    handleMessage(255, payload);
+    handleMessage(255, payload, strlen((char*)payload));
 }
 

@@ -19,6 +19,7 @@ struct WiFiConfig {
     String password;
 };
 
+#define VERSION "1.0"
 
 #define WEBSOCKET_PORT 82
 #define SPRAY_PIN 12
@@ -41,9 +42,10 @@ struct WiFiConfig {
 #define TLS_MQTT_PORT 8883
 #define TLS_MQTT_USERNAME "..."
 #define TLS_MQTT_PASSWORD "..."
-#define MQTT_TOPIC_COMMAND "roomFreshener/command"
+#define MQTT_TOPIC_RECEIVE "..."
+#define MQTT_TOPIC_SEND "..."
 
-#define MQTT_MAX_PACKET_SIZE 1500
+#define MQTT_MAX_PACKET_SIZE_OVERRIDE 3000
 
 #define BLYNK_TEMPLATE_ID "..."
 #define BLYNK_TEMPLATE_NAME "..."
@@ -53,17 +55,21 @@ struct WiFiConfig {
 #define _TASK_SLEEP_ON_IDLE_RUN
 #define _TASK_STD_FUNCTION
 
+#define TIME_ZONE +7 // Vietnam time zone UTC+7
+#define CONVERT_TO_LOCAL_TIME(dt) ((dt) + TimeSpan(TIME_ZONE * 3600))
+
 void loadWiFiConfig(WiFiConfig& wifiConfig) {
+    Serial.print("Loading WiFi configuration...");
     File file = LittleFS.open(PATH_FILENAME_WIFI_CONFIG, "r");
     if (!file) {
-        Serial.println("No WiFi config file found. Using default settings.");
+        Serial.println(" ---> No WiFi config file found. Using default settings.");
         return;
     }
 
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, file);
     if (error) {
-        Serial.print(F("Failed to read WiFi config file: "));
+        Serial.print(" ---> Failed to deserializeJson WiFi config file: ");
         Serial.println(error.f_str());
         file.close();
         return;
@@ -75,10 +81,12 @@ void loadWiFiConfig(WiFiConfig& wifiConfig) {
     wifiConfig.ssid = doc["ssid"] | "";
     wifiConfig.password = doc["password"] | "";
 
+    Serial.println(" ---> success.");
     file.close();
 }
 
 void saveWiFiConfig(const WiFiConfig& wifiConfig) {
+    Serial.print("Saving WiFi configuration...");
     JsonDocument doc;
     doc["mode"] = wifiConfig.mode;
     doc["ssidAp"] = wifiConfig.ssidAp;
@@ -88,7 +96,7 @@ void saveWiFiConfig(const WiFiConfig& wifiConfig) {
     File file = LittleFS.open(PATH_FILENAME_WIFI_CONFIG, "w");
     serializeJson(doc, file);
     file.close();
+    Serial.println(" ---> success.");
 }
-
 
 #endif

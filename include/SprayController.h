@@ -68,6 +68,7 @@ public:
         : _pin(pin), _rtc(rtc) {
         _pathFolderLog = normalizeFolderPath(pathFolderLog);
         _pathFileNameSprayTotal = pathFileNameSprayTotal;
+        loadSprayDataTotal();
         pinMode(_pin, OUTPUT);
         digitalWrite(_pin, LOW);
     }

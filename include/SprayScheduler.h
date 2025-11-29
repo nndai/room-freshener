@@ -41,6 +41,20 @@ private:
     String _fileNameSave = "";
     SprayInfo _lastSprayInfo;
 
+    void initTriggeredVector() {
+        _triggered.assign(256, false);
+    }
+
+    bool wasTriggered(uint8_t id) const {
+        return id < _triggered.size() ? _triggered[id] : false;
+    }
+
+    void setTriggered(uint8_t id, bool value) {
+        if (id < _triggered.size()) {
+            _triggered[id] = value;
+        }
+    }
+
 public:
     /**
      * @brief Khởi tạo SprayScheduler.
@@ -50,6 +64,7 @@ public:
      */
     SprayScheduler(SprayController* sc, RTC_DS1307* rtcModule, String fileNameSave = "/sprayTasks.bin")
         : _spray(sc), _rtc(rtcModule), _triggered(256, false), _fileNameSave(fileNameSave) {
+        initTriggeredVector();
     }
 
     /**
@@ -89,7 +104,7 @@ public:
 
             SprayTask task = { id, hour, minute, weekday, enabled, duration };
             tasks.push_back(task);
-            _triggered[id] = false;
+            setTriggered(id, false);
             return task.id;
         }
         else {
@@ -110,7 +125,7 @@ public:
         for (size_t i = 0; i < tasks.size(); ++i) {
             if (tasks[i].id == id) {
                 tasks.erase(tasks.begin() + i);
-                _triggered[id] = false;
+                setTriggered(id, false);
                 return true;
             }
         }
@@ -193,27 +208,32 @@ public:
      * @return true nếu tải thành công, false nếu thất bại.
      */
     bool load() {
+        Serial.print("Loading spray schedule from file...");
         File file = LittleFS.open(_fileNameSave.c_str(), "r");
-        if (!file) return false;
+        if (!file) {
+            Serial.println(" ---> Spray schedule file not found. Starting with an empty schedule.");
+            return false;
+        }
 
         uint32_t count = 0;
         file.read((uint8_t*)&count, sizeof(count));
 
         tasks.clear();
-        _triggered.clear();
+        initTriggeredVector();
 
         for (uint32_t i = 0; i < count; i++) {
             SprayTask t;
             if (file.read((uint8_t*)&t, sizeof(SprayTask)) == sizeof(SprayTask)) {
                 tasks.push_back(t);
-                _triggered.push_back(false);
             }
             else {
+                Serial.println(" ---> Error reading spray schedule from file. File may be corrupted.");
                 break; // file bị hỏng
             }
         }
 
         file.close();
+        Serial.println(" ---> success.");
         return true;
     }
 
@@ -222,8 +242,12 @@ public:
      * @note Phải được gọi liên tục trong vòng lặp chính.
      */
     void update() {
-        if (!_rtc->isrunning()) return;
-        DateTime now = _rtc->now();
+        if (!_rtc->isrunning()) {
+            Serial.println("RTC is not running. Skipping update.");
+            return;
+        }
+        DateTime now = CONVERT_TO_LOCAL_TIME(_rtc->now());
+        Serial.printf("SprayScheduler: Current time %02d:%02d (minute %d)\n", now.hour(), now.minute(), now.minute());
 
         if (now.minute() != _lastMinute) {
             std::fill(_triggered.begin(), _triggered.end(), false);
@@ -238,10 +262,13 @@ public:
             bool dayMatch = isOnceDaily || (t.weekday & (1 << now.dayOfTheWeek()));
             bool timeMatch = (t.hour == now.hour() && t.minute == now.minute());
 
-            if (timeMatch && dayMatch && !_triggered[t.id]) {
+            if (timeMatch && dayMatch && !wasTriggered(t.id)) {
+                Serial.printf("SprayScheduler: Triggered spray task ID=%d at %02d:%02d on weekday mask 0x%02X for %u ms\n",
+                    t.id, t.hour, t.minute, t.weekday, t.duration);
+
                 _spray->on(t.duration, SPRAY_REASON_SCHEDULED, &now);
                 _lastSprayInfo = { now, t.duration, SPRAY_REASON_SCHEDULED };
-                _triggered[t.id] = true;
+                setTriggered(t.id, true);
                 if (isOnceDaily) {
                     t.enabled = false;
                     save();
