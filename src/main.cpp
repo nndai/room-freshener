@@ -56,6 +56,7 @@ void printBanner();
 
 //======================== Tasks =============================
 Task* taskUpdateSprayScheduler;
+Task* taskSprayControllerUpdate;
 Task* taskUpdateLed;
 Task* taskButtonCheck;
 Task* taskConnectToMqtt;
@@ -111,7 +112,7 @@ void printBanner() {
     Serial.println(" | |__ _ __ ___  ___| |__   ___ _ __   ___ _ __ ");
     Serial.println(" |  __| '__/ _ \\/ __| '_ \\ / _ \\ '_ \\ / _ \\ '__|");
     Serial.println(" | |  | | |  __/\\__ \\ | | |  __/ | | |  __/ |   ");
-    Serial.print(" |_|  |_|  \\___||___/_| |_|\\___|_| |_|\\___|_| v");
+    Serial.print(" |_|  |_|  \\___||___/_| |_|\\___|_| |_|\\___|_|v");
     Serial.println(VERSION);
 }
 
@@ -171,8 +172,10 @@ void setupTask() {
                 }
                 ntpClient->begin();
                 ntpClient->forceUpdate();
+                delay(1000);
+                ntpClient->forceUpdate();
                 Serial.println("RTC synchronized via NTP.");
-                DateTime dt = DateTime(ntpClient->getEpochTime());
+                DateTime dt = DateTime(ntpClient->getEpochTime() + 1);
                 rtc.adjust(dt);
                 dt = CONVERT_TO_LOCAL_TIME(dt);
                 Serial.printf("Set RTC current time: %04d-%02d-%02d %02d:%02d:%02d\n",
@@ -181,6 +184,10 @@ void setupTask() {
             }
         }
         sprayScheduler.update();
+        }, &mainScheduler, true);
+
+    taskSprayControllerUpdate = new Task(500, TASK_FOREVER, []() {
+        sprayController.update();
         }, &mainScheduler, true);
 
     taskUpdateLed = new Task(10, TASK_FOREVER, []() {
@@ -639,7 +646,7 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
             sendMessage(num, responseStr);
             return;
         }
-        rtc.adjust(DateTime(timestamp));
+        rtc.adjust(DateTime(timestamp + 1));
         Serial.printf("RTC time set to %u\n", timestamp);
         String responseStr = "{\"command\":\"setTimeResponse\",\"status\":true,\"message\":\"RTC time updated. Current time: "
             + String(rtc.now().unixtime()) + "\"}";
