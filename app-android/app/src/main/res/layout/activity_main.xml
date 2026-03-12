@@ -6,13 +6,14 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@drawable/bg_activity_main">
     tools:context=".MainActivity">
 
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/view_pager"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="@android:color/white"
+        android:background="@android:color/transparent"
         app:layout_constraintBottom_toTopOf="@+id/main_tabs_holder"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -22,7 +23,7 @@
         android:id="@+id/main_tabs_holder"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#f1f1f1"
+        android:background="@android:color/transparent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -32,5 +33,16 @@
         app:tabRippleColor="@null"
         app:tabSelectedTextColor="@android:color/black"
   />
+
+    <ProgressBar
+        android:id="@+id/globalSpinner"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:visibility="gone"
+        android:elevation="8dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -3,6 +3,7 @@ package com.iot.roomfreshener.data.remote
 import android.util.Base64
 import android.util.Log
 import com.iot.roomfreshener.data.model.HomeSnapshot
+import com.iot.roomfreshener.data.model.SystemInfoSnapshot
 import com.iot.roomfreshener.data.model.SprayMoment
 import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskWriteRequest
@@ -52,6 +53,13 @@ class DeviceCommandDataSource(
         // Lệnh đọc toàn bộ lịch; ESP sẽ trả snapshot kèm base64
         sendJson(
             JSONObject().apply { put("command", "getAllTaskSpray") }
+        )
+    }
+
+    suspend fun requestSystemInfo() {
+        Log.d(TAG, "requestSystemInfo()")
+        sendJson(
+            JSONObject().apply { put("command", "getEspInfo") }
         )
     }
 
@@ -182,12 +190,14 @@ class DeviceCommandDataSource(
             when (command) {
                 "getAllTasksSprayResponse" -> emitSnapshot(json)
                 "getHomeDataResponse" -> emitHome(json)
+                "getEspInfoResponse" -> emitSystemInfo(json)
                 "getTimeResponse" -> emitDeviceTime(json)
                 "addTaskSprayResponse",
                 "removeTaskSprayResponse",
                 "editTaskSprayResponse",
                 "setTaskEnabledResponse",
                 "setTimeResponse",
+                "sprayNowResponse",
                 "setWiFiConfigResponse" -> emitCommandResult(command, json)
                 else -> Unit
             }
@@ -200,12 +210,14 @@ class DeviceCommandDataSource(
     private fun emitSnapshot(json: JSONObject) {
         val tasks = parseTasks(json)
         _events.tryEmit(DeviceCommandEvent.Snapshot(tasks))
+        _events.tryEmit(DeviceCommandEvent.CommandResult("getAllTasksSprayResponse", true, ""))
     }
 
     private fun emitHome(json: JSONObject) {
         val snapshot = parseHome(json)
         Log.d(TAG, "emitHome temperature=${snapshot.temperature} total=${snapshot.totalSprayCount}")
         _events.tryEmit(DeviceCommandEvent.Home(snapshot))
+        _events.tryEmit(DeviceCommandEvent.CommandResult("getHomeDataResponse", true, ""))
     }
 
     private fun emitDeviceTime(json: JSONObject) {
@@ -214,6 +226,45 @@ class DeviceCommandDataSource(
         if (timestamp > 0) {
             _events.tryEmit(DeviceCommandEvent.DeviceTime(timestamp))
         }
+    }
+
+    private fun emitSystemInfo(json: JSONObject) {
+        val info = SystemInfoSnapshot(
+            chipId = json.optLong("chipId", 0),
+            coreVersion = json.optString("coreVersion", ""),
+            sdkVersion = json.optString("sdkVersion", ""),
+            cpuFreqMHz = json.optInt("cpuFreqMHz", 0),
+            flashChipId = json.optString("flashChipId", ""),
+            flashChipSizeKb = json.optLong("flashChipSizeKb", 0),
+            flashChipRealSizeKb = json.optLong("flashChipRealSizeKb", 0),
+            flashChipSpeedMHz = json.optInt("flashChipSpeedMHz", 0),
+            flashChipMode = json.optInt("flashChipMode", 0),
+            freeHeap = json.optLong("freeHeap", 0),
+            heapFragmentation = json.optInt("heapFragmentation", 0),
+            maxFreeBlockSize = json.optLong("maxFreeBlockSize", 0),
+            sketchSizeKb = json.optLong("sketchSizeKb", 0),
+            freeSketchSpaceKb = json.optLong("freeSketchSpaceKb", 0),
+            sketchMD5 = json.optString("sketchMD5", ""),
+            resetReason = json.optString("resetReason", ""),
+            bootMode = json.optInt("bootMode", 0),
+            vccMv = json.optInt("vccMv", 0),
+            uptime = json.optString("uptime", ""),
+            appVersion = json.optString("appVersion", ""),
+            loopMqttRunning = json.optBoolean("loopMqttRunning", false),
+            loopWebsocketRunning = json.optBoolean("loopWebsocketRunning", false),
+            wifiSsid = json.optString("wifiSsid", ""),
+            wifiRssi = json.optInt("wifiRssi", 0),
+            wifiMode = json.optInt("wifiMode", 0),
+            wifiStatus = json.optInt("wifiStatus", 0),
+            wifiIp = json.optString("wifiIp", ""),
+            wifiGateway = json.optString("wifiGateway", ""),
+            wifiSubnet = json.optString("wifiSubnet", ""),
+            wifiMac = json.optString("wifiMac", ""),
+            wifiChannel = json.optInt("wifiChannel", 0),
+            wifiAutoReconnect = json.optBoolean("wifiAutoReconnect", false),
+            wifiSleepMode = json.optBoolean("wifiSleepMode", false)
+        )
+        _events.tryEmit(DeviceCommandEvent.SystemInfo(info))
     }
 
     private fun emitCommandResult(command: String, json: JSONObject) {

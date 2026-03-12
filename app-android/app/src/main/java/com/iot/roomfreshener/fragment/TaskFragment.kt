@@ -28,6 +28,7 @@ class TaskFragment : Fragment() {
 
     private lateinit var adapter: TaskAdapter
     private lateinit var placeholder: TextView
+    private lateinit var overlayLoading: View
     private var emptyMessage: CharSequence = ""
 
     override fun onCreateView(
@@ -40,6 +41,7 @@ class TaskFragment : Fragment() {
         val recycler = view.findViewById<RecyclerView>(R.id.task_list)
         val fab = view.findViewById<FloatingActionButton>(R.id.task_fab)
         placeholder = view.findViewById(R.id.task_placeholder)
+        overlayLoading = view.findViewById(R.id.overlayLoading)
         emptyMessage = placeholder.text
 
         adapter = TaskAdapter(
@@ -56,15 +58,18 @@ class TaskFragment : Fragment() {
 
     private fun collectUiState() {
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect { state ->
-                    adapter.submitList(state.items)
-                    if (state.items.isEmpty() && state.isLoading) {
-                        placeholder.text = getString(R.string.task_loading_placeholder)
-                        placeholder.isVisible = true
-                    } else {
-                        placeholder.text = emptyMessage
-                        placeholder.isVisible = state.items.isEmpty()
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                launch {
+                    viewModel.uiState.collect { state ->
+                        adapter.submitList(state.items)
+                        overlayLoading.isVisible = state.isProcessing
+                        if (state.items.isEmpty() && state.isLoading) {
+                            placeholder.text = getString(R.string.task_loading_placeholder)
+                            placeholder.isVisible = true
+                        } else {
+                            placeholder.text = emptyMessage
+                            placeholder.isVisible = state.items.isEmpty()
+                        }
                     }
                 }
             }
@@ -73,11 +78,16 @@ class TaskFragment : Fragment() {
 
     private fun collectEvents() {
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.events.collect { event ->
-                    when (event) {
-                        is TaskUiEvent.ShowMessage -> showSnackbar(event.message)
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                launch {
+                    viewModel.events.collect { event ->
+                        when (event) {
+                            is TaskUiEvent.ShowMessage -> showSnackbar(event.message)
+                        }
                     }
+                }
+                launch {
+                    viewModel.refresh()
                 }
             }
         }

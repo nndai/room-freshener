@@ -48,15 +48,15 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeData() {
         viewModelScope.launch {
             combine(repository.tasks, repository.connectionState) { tasks, connection ->
-                TaskUiState(
-                    items = tasks
-                        .map { task -> task.toTaskItem() }
-                        .sortedBy { it.hour * 60 + it.minute },
-                    isLoading = false,
-                    connectionState = connection
-                )
-            }.collect { state ->
-                _uiState.value = state
+                tasks to connection
+            }.collect { (tasks, connection) ->
+                _uiState.update { old ->
+                    old.copy(
+                        items = tasks.map { it.toTaskItem() }.sortedBy { it.hour * 60 + it.minute },
+                        isLoading = tasks.isEmpty() && connection is DeviceConnectionState.Connecting,
+                        connectionState = connection
+                    )
+                }
             }
         }
     }
@@ -70,9 +70,12 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleCommandResult(event: DeviceCommandEvent.CommandResult) {
+        _uiState.update { it.copy(isProcessing = false) }
         if (event.success) {
             if (event.command in successCommands) {
-                refresh()
+                if (event.command != "getAllTasksSprayResponse") {
+                    refresh()
+                }
             }
         } else {
             _events.tryEmit(
@@ -83,7 +86,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refresh() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isProcessing = true) }
             repository.refreshTasks()
         }
     }
@@ -99,6 +102,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             enabled = item.enabled
         )
         viewModelScope.launch {
+            _uiState.update { it.copy(isProcessing = true) }
             if (request.id == null) {
                 repository.createTask(request)
             } else {
@@ -114,6 +118,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
+            _uiState.update { it.copy(isProcessing = true) }
             repository.deleteTask(id)
         }
     }
@@ -125,6 +130,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
+            _uiState.update { it.copy(isProcessing = true) }
             repository.setTaskEnabled(id, enabled)
         }
     }
@@ -156,7 +162,8 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             "addTaskSprayResponse",
             "editTaskSprayResponse",
             "removeTaskSprayResponse",
-            "setTaskEnabledResponse"
+            "setTaskEnabledResponse",
+            "getAllTasksSprayResponse"
         )
     }
 }
@@ -164,7 +171,8 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
 data class TaskUiState(
     val items: List<TaskItem>,
     val isLoading: Boolean,
-    val connectionState: DeviceConnectionState
+    val connectionState: DeviceConnectionState,
+    val isProcessing: Boolean = false
 )
 
 sealed interface TaskUiEvent {

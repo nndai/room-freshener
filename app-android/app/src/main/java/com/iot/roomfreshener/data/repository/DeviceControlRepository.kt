@@ -2,6 +2,7 @@ package com.iot.roomfreshener.data.repository
 
 import android.util.Log
 import com.iot.roomfreshener.data.model.HomeSnapshot
+import com.iot.roomfreshener.data.model.SystemInfoSnapshot
 import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskWriteRequest
 import com.iot.roomfreshener.data.model.WifiConfigPayload
@@ -37,6 +38,9 @@ class DeviceControlRepository(
     private val _homeSnapshot = MutableStateFlow<HomeSnapshot?>(null)
     val homeSnapshot: StateFlow<HomeSnapshot?> = _homeSnapshot.asStateFlow()
 
+    private val _systemInfoSnapshot = MutableStateFlow<SystemInfoSnapshot?>(null)
+    val systemInfoSnapshot: StateFlow<SystemInfoSnapshot?> = _systemInfoSnapshot.asStateFlow()
+
     private val _deviceTimeSeconds = MutableStateFlow<Long?>(null)
     val deviceTimeSeconds: StateFlow<Long?> = _deviceTimeSeconds.asStateFlow()
 
@@ -59,6 +63,7 @@ class DeviceControlRepository(
                 when (event) {
                     is DeviceCommandEvent.Snapshot -> _tasks.value = event.tasks
                     is DeviceCommandEvent.Home -> _homeSnapshot.value = event.snapshot
+                    is DeviceCommandEvent.SystemInfo -> _systemInfoSnapshot.value = event.info
                     is DeviceCommandEvent.DeviceTime -> _deviceTimeSeconds.value = event.timestampSeconds
                     is DeviceCommandEvent.CommandResult -> _commandEvents.emit(event)
                     is DeviceCommandEvent.Failure -> _commandEvents.emit(
@@ -79,6 +84,7 @@ class DeviceControlRepository(
                 if (state is DeviceConnectionState.Connected) {
                     refreshTasks()
                     refreshHome()
+                    refreshSystemInfo()
                 }
             }
         }
@@ -117,6 +123,11 @@ class DeviceControlRepository(
     suspend fun refreshHome() {
         Log.d(TAG, "refreshHome()")
         remote.requestHomeData()
+    }
+
+    suspend fun refreshSystemInfo() {
+        Log.d(TAG, "refreshSystemInfo()")
+        remote.requestSystemInfo()
     }
 
     suspend fun requestDeviceTime() {

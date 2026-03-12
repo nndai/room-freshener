@@ -5,7 +5,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F6FA"
     android:padding="24dp">
 
     <TextView
@@ -30,6 +29,17 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="@id/headerTitle"
         app:layout_constraintTop_toBottomOf="@id/headerTitle" />
+
+    <TextView
+        android:id="@+id/tvLatency"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Ping: -- ms"
+        android:textColor="#9AA0A6"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/environmentCard"
@@ -173,6 +183,34 @@
                     android:text="Cách đây 01 giờ 45 phút"
                     android:textColor="#5F6368"
                     android:textSize="13sp" />
+                
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Chế độ:"
+                        android:textColor="#9AA0A6"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/tvSprayMode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="6dp"
+                        android:text="Tự động"
+                        android:textColor="#0F9D58"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        />
+                </LinearLayout>
             </LinearLayout>
 
             <View
@@ -212,34 +250,6 @@
                     android:text="Còn 02 giờ 15 phút"
                     android:textColor="#5F6368"
                     android:textSize="14sp" />
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Chế độ:"
-                        android:textColor="#9AA0A6"
-                        android:textSize="13sp" />
-
-                    <TextView
-                        android:id="@+id/tvSprayMode"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="6dp"
-                        android:text="Tự động"
-                        android:textColor="#0F9D58"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
-                        />
-                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
@@ -309,5 +319,21 @@
         app:layout_constraintHorizontal_bias="0.5"
         app:layout_constraintStart_toStartOf="parent" />
 
+    <!-- Overlay Loading -->
+    <FrameLayout
+        android:id="@+id/overlayLoading"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#00000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        android:elevation="10dp">
+
+        <ProgressBar
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center" />
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

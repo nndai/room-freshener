@@ -5,8 +5,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/task_fragment"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#F5F6FA">
+    android:layout_height="match_parent">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/task_holder"
@@ -30,7 +29,6 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:layout_marginBottom="10dp"
             android:text="Tạo và quản lý các lần xịt theo ngày, giờ mong muốn."
             android:textColor="#5F6368"
             android:textSize="14sp"
@@ -42,6 +40,7 @@
             android:id="@+id/task_list"
             android:layout_width="0dp"
             android:layout_height="0dp"
+            android:layout_marginTop="10dp"
             android:clipToPadding="false"
             android:overScrollMode="ifContentScrolls"
             android:paddingBottom="120dp"
@@ -82,5 +81,22 @@
         android:src="@drawable/ic_add_vector"
         app:backgroundTint="#114D85"
         app:tint="@android:color/white" />
+
+    <!-- Overlay Loading -->
+    <FrameLayout
+        android:id="@+id/overlayLoading"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#4D000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        android:elevation="10dp">
+
+        <ProgressBar
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center" />
+    </FrameLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

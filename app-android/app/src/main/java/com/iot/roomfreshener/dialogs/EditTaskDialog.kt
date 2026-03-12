@@ -32,9 +32,11 @@ class EditTaskDialog(
 
     private val daysHolder: LinearLayout = view.findViewById(R.id.task_days_holder)
     private val dayLetters = activity.resources.getStringArray(R.array.task_day_letters).toList()
-    private val selectedDays = task?.repeatDays
-        ?.mapNotNull { dayLetters.indexOf(it).takeIf { idx -> idx >= 0 } }
-        ?.toMutableSet() ?: mutableSetOf()
+    private val selectedDays = if (task != null) {
+        task.repeatDays.mapNotNull { dayLetters.indexOf(it).takeIf { idx -> idx >= 0 } }.toMutableSet()
+    } else {
+        (0 until dayLetters.size).toMutableSet()
+    }
 
     init {
         hourPicker.setFormatter { i -> String.format("%02d", i) }

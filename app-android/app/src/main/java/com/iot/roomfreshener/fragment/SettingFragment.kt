@@ -21,9 +21,11 @@ import com.iot.roomfreshener.data.model.ModeConnect
 import com.iot.roomfreshener.data.model.WifiConfigPayload
 import com.iot.roomfreshener.ui.setting.SettingViewModel
 import java.time.Instant
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
+import java.time.ZoneId
 
 class SettingFragment : Fragment() {
 
@@ -42,6 +44,8 @@ class SettingFragment : Fragment() {
     private lateinit var inputPasswordApLayout: TextInputLayout
     private lateinit var inputSsidLayout: TextInputLayout
     private lateinit var inputPasswordLayout: TextInputLayout
+    private lateinit var overlayLoading: View
+    private lateinit var tvSystemInfo: TextView
 
     private var selectedMode: ModeConnect = ModeConnect.WEBSOCKET
 
@@ -73,6 +77,8 @@ class SettingFragment : Fragment() {
         inputPasswordApLayout = root.findViewById(R.id.inputPasswordApLayout)
         inputSsidLayout = root.findViewById(R.id.inputSsidLayout)
         inputPasswordLayout = root.findViewById(R.id.inputPasswordLayout)
+        overlayLoading = root.findViewById(R.id.overlayLoading)
+        tvSystemInfo = root.findViewById(R.id.tvSystemInfo)
     }
 
     private fun bindInteractions() {
@@ -105,10 +111,24 @@ class SettingFragment : Fragment() {
 
     private fun observeState() {
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 launch {
                     viewModel.deviceTimeSeconds.collect { timestamp ->
                         renderDeviceTime(timestamp)
+                    }
+                }
+                launch {
+                    viewModel.systemInfoSnapshot.collect { info ->
+                        if (info != null) {
+                            tvSystemInfo.text = info.toFormattedString()
+                        } else {
+                            tvSystemInfo.text = "Đang tải..."
+                        }
+                    }
+                }
+                launch {
+                    viewModel.isProcessing.collect { isProcessing ->
+                        overlayLoading.visibility = if (isProcessing) View.VISIBLE else View.GONE
                     }
                 }
                 launch {
@@ -116,6 +136,13 @@ class SettingFragment : Fragment() {
                         if (message.isNotBlank()) {
                             Snackbar.make(requireView(), message, Snackbar.LENGTH_SHORT).show()
                         }
+                    }
+                }
+                launch {
+                    while (isActive) {
+                        viewModel.refreshDeviceTime()
+                        viewModel.refreshSystemInfo()
+                        delay(5000L)
                     }
                 }
             }

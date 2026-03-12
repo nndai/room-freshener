@@ -67,11 +67,9 @@ Task* taskRequestWifiInet;
 
 //========================= Setup & Loop ======================
 void setup() {
-    led.on();
+    led.off();
     Serial.begin(74880);
-    while (!Serial) {
-        delay(1);
-    }
+    delay(100);
     printEspInfo();
 
     LittleFS.begin();
@@ -81,7 +79,7 @@ void setup() {
     if (!rtc.begin(&Wire)) {
         Serial.println("Failed to initialize RTC.");
     }
-    if( !rtc.isrunning()) {
+    if (!rtc.isrunning()) {
         Serial.println("RTC is NOT running");
     }
 
@@ -92,7 +90,7 @@ void setup() {
     sprayController.loadSprayDataTotal();
     setupConnection();
 
-    led.blink(3, 50, 5000);
+    led.blink(2000);
 }
 
 void loop() {
@@ -162,7 +160,10 @@ void setupTask() {
     Serial.println("Setting up tasks...");
     taskUpdateSprayScheduler = new Task(2000, TASK_FOREVER, []() {
         if (!rtc.isrunning()) {
-            if (WiFi.status() == WL_CONNECTED && WiFi.getMode() != WIFI_AP) {
+
+            if ((isWifiInetConnected() && isInternetWifiInetConnected()) ||
+                (!isWifiInetConnected() && WiFi.status() == WL_CONNECTED && WiFi.getMode() != WIFI_AP)) {
+
                 if (!ntpClient) {
                     ntpUDP = new WiFiUDP();
                     ntpClient = new NTPClient(*ntpUDP);
@@ -173,14 +174,15 @@ void setupTask() {
                 ntpClient->begin();
                 ntpClient->forceUpdate();
                 delay(1000);
-                ntpClient->forceUpdate();
-                Serial.println("RTC synchronized via NTP.");
-                DateTime dt = DateTime(ntpClient->getEpochTime() + 1);
-                rtc.adjust(dt);
-                dt = CONVERT_TO_LOCAL_TIME(dt);
-                Serial.printf("Set RTC current time: %04d-%02d-%02d %02d:%02d:%02d\n",
-                    dt.year(), dt.month(), dt.day(),
-                    dt.hour(), dt.minute(), dt.second());
+                if (ntpClient->forceUpdate()) {
+                    Serial.println("RTC synchronized via NTP.");
+                    DateTime dt = DateTime(ntpClient->getEpochTime() + 1);
+                    rtc.adjust(dt);
+                    dt = CONVERT_TO_LOCAL_TIME(dt);
+                    Serial.printf("Set RTC current time: %04d-%02d-%02d %02d:%02d:%02d\n",
+                        dt.year(), dt.month(), dt.day(),
+                        dt.hour(), dt.minute(), dt.second());
+                }
             }
         }
         sprayScheduler.update();
@@ -199,6 +201,16 @@ void setupTask() {
         }, &mainScheduler, true);
 
     taskConnectToMqtt = new Task(2000, TASK_FOREVER, []() {
+        if (isWifiInetConnected()) {
+            if (isInternetWifiInetConnected()) {
+                Serial.println("WiFi INET is connected. Connecting to MQTT Broker...");
+            }
+            else {
+                Serial.println("WiFi INET is NOT Internet connected.");
+                return;
+            }
+        }
+
         String clientID = "ESPClient-";
         clientID += String(random(0xffff), HEX);
         if (mqttClient && mqttClient->connect(clientID.c_str(), TLS_MQTT_USERNAME, TLS_MQTT_PASSWORD)) {
@@ -214,11 +226,16 @@ void setupTask() {
             Serial.println("Connected to WiFi!");
             Serial.print("IP address: ");
             Serial.println(WiFi.localIP());
+            Serial.print("Signal strength (RSSI): ");
+            Serial.print(WiFi.RSSI());
+            Serial.println(" dBm");
+            led.blink(3, 50, 3000);
 
             if (isWifiInetConnected()) {
-                taskRequestWifiInet->setInterval(2000);
+                Serial.println("Connected to WiFi INET. Starting login loop...");
+                startWifiInetLogin();
+                forceWifiInetLogin();
                 taskRequestWifiInet->enable();
-                taskRequestWifiInet->forceNextIteration();
             }
 
             if (wifiConfig.mode == MQTT) {
@@ -242,24 +259,8 @@ void setupTask() {
         }
         }, &mainScheduler, false);
 
-    taskRequestWifiInet = new Task(2000, TASK_FOREVER, []() {
-        taskRequestWifiInet->setInterval(2000);
-        if (WiFi.status() == WL_CONNECTED) {
-            if (!isWifiInetConnected()) {
-                Serial.println("Not connected to WiFi INET Free.");
-                taskRequestWifiInet->setInterval(5 * 60 * 1000); // 5 minutes
-                return;
-            }
-            
-            Serial.println("Connected to WiFi INET Free. Logging in...");
-            if (logoutWifiInet() && loginWifiInet()) {
-                Serial.println("Successfully logged into WiFi Internet gateway.");
-                taskRequestWifiInet->setInterval(5 * 60 * 1000); // 5 minutes
-            }
-            else {
-                Serial.println("Failed to log into WiFi Internet gateway.");
-            }
-        }
+    taskRequestWifiInet = new Task(100, TASK_FOREVER, []() {
+        loopWifiInetLogin();
         }, &mainScheduler, false);
 }
 
@@ -296,8 +297,10 @@ void setupMqtt() {
     if (!mqttClient) {
         wifiMqttClient = new WiFiClientSecure();
         wifiMqttClient->setInsecure();
+        wifiMqttClient->setBufferSizes(MQTT_MAX_PACKET_SIZE_OVERRIDE, MQTT_MAX_PACKET_SIZE_OVERRIDE);
         mqttClient = new PubSubClient(*wifiMqttClient);
         mqttClient->setBufferSize(MQTT_MAX_PACKET_SIZE_OVERRIDE);
+        mqttClient->setSocketTimeout(MQTT_SOCKET_TIMEOUT_OVERRIDE);
         mqttClient->setServer(TLS_MQTT_URL, TLS_MQTT_PORT);
         mqttClient->setCallback([](char* topic, uint8_t* payload, unsigned int length) {
             handleMessage(254, payload, length);
@@ -310,6 +313,11 @@ void setupMqtt() {
 
 void setupConnection() {
     Serial.println("Setting up connection...");
+    if (isWifiInetRunning()) {
+        stopWifiInetLogin();
+        taskRequestWifiInet->disable();
+    }
+
     if (wifiConfig.mode == WEBSOCKET) {
         WiFi.mode(WIFI_AP);
         WiFi.softAP(wifiConfig.ssidAp.c_str(), wifiConfig.passwordAp.c_str());
@@ -370,12 +378,24 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
      *   "duration": 5000
      * }
      *
-     * response: none
+     * response JSON:
+     * {
+     *  "command": "sprayNowResponse",
+     *  "status": 1,
+     *  "message": "success"
+     * }
      */
     if (command == "sprayNow") {
         uint32_t duration = doc["duration"] | 1000;
         sprayScheduler.sprayNow(duration, SPRAY_REASON_MANUAL);
         Serial.printf("Spraying for %u ms\n", duration);
+        JsonDocument responseDoc;
+        responseDoc["command"] = "sprayNowResponse";
+        responseDoc["status"] = true;
+        responseDoc["message"] = "success.";
+        String jsonStr;
+        serializeJson(responseDoc, jsonStr);
+        sendMessage(num, jsonStr);
     }
 
     /**
@@ -739,10 +759,15 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
             return;
         }
 
-        // If SSID/AP is empty, keep the old value
+        // If SSID is empty, keep the old value
         if (ssidAp.length() < 1) {
             ssidAp = wifiConfig.ssidAp;
             passwordAp = wifiConfig.passwordAp;
+        }
+
+        if (ssid.length() < 1) {
+            ssid = wifiConfig.ssid;
+            password = wifiConfig.password;
         }
 
         wifiConfig.ssidAp = ssidAp;
@@ -772,13 +797,80 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
      * response JSON:
      * {
      *   "command": "getEspInfoResponse",
-     *   "info": "ESP Information:..."
+     *   "chipId": 1234567,
+     *   "coreVersion": "2_7_4",
+     *   ...
      * }
      */
     else if (command == "getEspInfo") {
-        String espInfo = getEspInfo();
-        String responseStr = "{\"command\":\"getEspInfoResponse\",\"info\":\"" + espInfo + "\"}";
-        sendMessage(num, responseStr);
+        JsonDocument responseDoc;
+        responseDoc["command"] = "getEspInfoResponse";
+
+        // Runtime
+        responseDoc["loopMqttRunning"] = taskLoopConnection->isEnabled() && mqttClient != nullptr;
+        responseDoc["loopWebsocketRunning"] = taskLoopConnection->isEnabled() && websocket != nullptr;
+
+        // ESP Info
+        responseDoc["chipId"] = ESP.getChipId();
+        responseDoc["coreVersion"] = ESP.getCoreVersion();
+        responseDoc["sdkVersion"] = ESP.getSdkVersion();
+        responseDoc["cpuFreqMHz"] = ESP.getCpuFreqMHz();
+
+        // Flash
+        responseDoc["flashChipId"] = String(ESP.getFlashChipId(), HEX);
+        responseDoc["flashChipSizeKb"] = ESP.getFlashChipSize() / 1024;
+        responseDoc["flashChipRealSizeKb"] = ESP.getFlashChipRealSize() / 1024;
+        responseDoc["flashChipSpeedMHz"] = ESP.getFlashChipSpeed() / 1000000;
+        responseDoc["flashChipMode"] = ESP.getFlashChipMode();
+
+        // Memory
+        responseDoc["freeHeap"] = ESP.getFreeHeap();
+        responseDoc["heapFragmentation"] = ESP.getHeapFragmentation();
+        responseDoc["maxFreeBlockSize"] = ESP.getMaxFreeBlockSize();
+
+        // Sketch
+        responseDoc["sketchSizeKb"] = ESP.getSketchSize() / 1024;
+        responseDoc["freeSketchSpaceKb"] = ESP.getFreeSketchSpace() / 1024;
+        responseDoc["sketchMD5"] = ESP.getSketchMD5();
+
+        // System
+        responseDoc["resetReason"] = ESP.getResetReason();
+        responseDoc["bootMode"] = ESP.getBootMode();
+        responseDoc["vccMv"] = ESP.getVcc();
+        responseDoc["appVersion"] = VERSION;
+
+        // WiFi
+        responseDoc["wifiSsid"] = WiFi.SSID();
+        responseDoc["wifiRssi"] = WiFi.RSSI();
+        responseDoc["wifiMode"] = (int)WiFi.getMode();
+        responseDoc["wifiStatus"] = WiFi.status();
+        if (WiFi.isConnected()) {
+            responseDoc["wifiIp"] = WiFi.localIP().toString();
+            responseDoc["wifiGateway"] = WiFi.gatewayIP().toString();
+            responseDoc["wifiSubnet"] = WiFi.subnetMask().toString();
+            responseDoc["wifiMac"] = WiFi.macAddress();
+            responseDoc["wifiChannel"] = WiFi.channel();
+        }
+
+        responseDoc["wifiAutoReconnect"] = WiFi.getAutoConnect();
+        responseDoc["wifiSleepMode"] = WiFi.getSleepMode();
+
+        uint32_t uptimeMs = millis();
+        uint32_t seconds = uptimeMs / 1000;
+        uint32_t minutes = seconds / 60;
+        uint32_t hours = minutes / 60;
+        uint32_t days = hours / 24;
+        seconds %= 60;
+        minutes %= 60;
+        hours %= 24;
+
+        char uptimeStr[32];
+        snprintf(uptimeStr, sizeof(uptimeStr), "%02lud %02luh %02lum %02lus", (unsigned long)days, (unsigned long)hours, (unsigned long)minutes, (unsigned long)seconds);
+        responseDoc["uptime"] = uptimeStr;
+
+        String jsonStr;
+        serializeJson(responseDoc, jsonStr);
+        sendMessage(num, jsonStr);
     }
 
     else {

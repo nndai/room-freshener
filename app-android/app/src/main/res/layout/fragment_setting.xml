@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-<ScrollView
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<ScrollView 
     android:layout_width="match_parent"
     android:layout_height="match_parent">
     <LinearLayout
@@ -12,7 +14,6 @@
 
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#F5F6FA"
             android:padding="24dp">
 
             <TextView
@@ -128,37 +129,6 @@
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/inputSsidApLayout"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="12dp"
-                        android:hint="SSID Access Point">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etSsidAp"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:singleLine="true" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/inputPasswordApLayout"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="12dp"
-                        android:hint="Mật khẩu Access Point">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etPasswordAp"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:singleLine="true"
-                            android:inputType="textPassword" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/inputSsidLayout"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
@@ -178,10 +148,42 @@
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
                         android:hint="Mật khẩu WiFi">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etPassword"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:singleLine="true"
+                            android:inputType="textPassword" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/inputSsidApLayout"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="SSID AP">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etSsidAp"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:singleLine="true" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/inputPasswordApLayout"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Mật khẩu AP">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etPasswordAp"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:singleLine="true"
@@ -196,16 +198,74 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
+                android:backgroundTint="#125A97"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
                 android:text="Gửi cấu hình"
                 android:textAllCaps="false"
                 android:textSize="16sp"
-                android:backgroundTint="#125A97"
                 app:cornerRadius="18dp"
-                app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/configCard" />
 
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/systemInfoCard"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="24dp"
+                app:cardBackgroundColor="#FFFFFFFF"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="4dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/btnSubmitConfig">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:text="Thông tin hệ thống"
+                        android:textColor="#5F6368"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvSystemInfo"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="#202124"
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:text="Đang tải..." />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
         </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 </ScrollView>
+
+    <!-- Overlay Loading -->
+    <FrameLayout
+        android:id="@+id/overlayLoading"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#4D000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center" />
+    </FrameLayout>
+</FrameLayout>

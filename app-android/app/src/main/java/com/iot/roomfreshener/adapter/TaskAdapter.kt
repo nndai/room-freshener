@@ -51,7 +51,11 @@ class TaskAdapter(
 
         fun bind(item: TaskItem) {
             time.text = String.format(Locale.getDefault(), "%02d:%02d", item.hour, item.minute)
-            days.text = item.repeatDays.joinToString(", ").ifEmpty { "Không lặp" }
+            days.text = if (item.repeatDays.size == 7) {
+                "Hàng ngày"
+            } else {
+                item.repeatDays.joinToString(", ").ifEmpty { "Không lặp" }
+            }
             duration.text = "Thời gian phun: ${item.durationSeconds} giây"
             toggle.setOnCheckedChangeListener(null)
             toggle.isChecked = item.enabled

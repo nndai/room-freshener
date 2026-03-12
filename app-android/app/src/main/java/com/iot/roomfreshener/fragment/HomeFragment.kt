@@ -13,6 +13,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
 import com.iot.roomfreshener.R
 import com.iot.roomfreshener.data.model.HomeSnapshot
+import com.google.android.material.snackbar.Snackbar
 import com.iot.roomfreshener.data.model.SprayMoment
 import com.iot.roomfreshener.ui.home.HomeViewModel
 import java.time.Duration
@@ -35,6 +36,8 @@ class HomeFragment : Fragment() {
     private lateinit var tvSprayMode: TextView
     private lateinit var tvTotalSprays: TextView
     private lateinit var btnSprayNow: MaterialButton
+    private lateinit var overlayLoading: View
+    private lateinit var tvLatency: TextView
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -59,14 +62,33 @@ class HomeFragment : Fragment() {
         tvSprayMode = root.findViewById(R.id.tvSprayMode)
         tvTotalSprays = root.findViewById(R.id.tvTotalSprays)
         btnSprayNow = root.findViewById(R.id.btnSprayNow)
+        overlayLoading = root.findViewById(R.id.overlayLoading)
+        tvLatency = root.findViewById(R.id.tvLatency)
     }
 
     private fun observeUi() {
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 launch {
                     viewModel.homeSnapshot.collect { snapshot ->
                         renderSnapshot(snapshot)
+                    }
+                }
+                launch {
+                    viewModel.isProcessing.collect { isProcessing ->
+                        overlayLoading.visibility = if (isProcessing) View.VISIBLE else View.GONE
+                    }
+                }
+                launch {
+                    viewModel.latencyMs.collect { latency ->
+                        tvLatency.text = if (latency != null) "Ping: ${latency}ms" else "Ping: --"
+                    }
+                }
+                launch {
+                    viewModel.messages.collect { message ->
+                        if (message.isNotBlank()) {
+                            Snackbar.make(requireView(), message, Snackbar.LENGTH_SHORT).show()
+                        }
                     }
                 }
                 launch {

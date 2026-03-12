@@ -15,6 +15,17 @@ import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import com.iot.roomfreshener.adapter.TabItem
 import com.iot.roomfreshener.adapter.ViewPagerAdapter
+import com.iot.roomfreshener.data.di.DeviceRepositoryProvider
+import com.iot.roomfreshener.data.remote.DeviceConnectionState
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.Lifecycle
+import android.widget.ProgressBar
+import androidx.activity.enableEdgeToEdge
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.iot.roomfreshener.fragment.HomeFragment
 import com.iot.roomfreshener.fragment.SettingFragment
 import com.iot.roomfreshener.fragment.TaskFragment
@@ -56,13 +67,24 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var viewPager: ViewPager2
     private lateinit var tabLayout: TabLayout
+    private lateinit var globalSpinner: ProgressBar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContentView(R.layout.activity_main)
 
-        window.statusBarColor = ContextCompat.getColor(this, android.R.color.white)
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(
+                systemBars.left,
+                systemBars.top,
+                systemBars.right,
+                systemBars.bottom
+            )
+            insets
+        }
+
 
         viewPager = findViewById(R.id.view_pager)
         tabLayout = findViewById(R.id.main_tabs_holder)
@@ -83,6 +105,16 @@ class MainActivity : AppCompatActivity() {
         })
         for (i in 0 until tabLayout.tabCount) {
             updateTabViewState(tabLayout.getTabAt(i), i == tabLayout.selectedTabPosition)
+        }
+
+        globalSpinner = findViewById(R.id.globalSpinner)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                val repo = DeviceRepositoryProvider.provide()
+                repo.connectionState.collectLatest { state ->
+                    globalSpinner.visibility = if (state is DeviceConnectionState.Connecting) View.VISIBLE else View.GONE
+                }
+            }
         }
     }
 
