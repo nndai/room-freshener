@@ -45,6 +45,7 @@ struct WiFiConfig {
 #define MQTT_TOPIC_SEND "..."
 
 #define MQTT_MAX_PACKET_SIZE_OVERRIDE 3000
+#define MQTT_SOCKET_TIMEOUT_OVERRIDE 7
 
 #define _TASK_SLEEP_ON_IDLE_RUN
 #define _TASK_STD_FUNCTION
@@ -79,6 +80,17 @@ void loadWiFiConfig(WiFiConfig& wifiConfig) {
         wifiConfig.mode = WEBSOCKET;
     }
     Serial.println(" ---> success.");
+    Serial.print("Mode: "); Serial.println(wifiConfig.mode == WEBSOCKET ? "WEBSOCKET" : "MQTT");
+    Serial.print("SSID: "); Serial.println(wifiConfig.ssid);
+
+    String masked;
+    masked.reserve(wifiConfig.password.length());
+    for (size_t i = 0; i < wifiConfig.password.length(); i++) {
+        masked += '*';
+    }
+    Serial.print("Password: "); Serial.println(masked);
+    Serial.print("AP SSID: "); Serial.println(wifiConfig.ssidAp);
+    Serial.print("AP Password: "); Serial.println(wifiConfig.passwordAp);
     file.close();
 }
 
