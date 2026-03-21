@@ -277,6 +277,28 @@ void setupTask() {
     taskRequestWifiInet->setSchedulingOption(TASK_INTERVAL);
 }
 
+void setupButton() {
+    button.attachClick([]() {
+        Serial.println("Button clicked!");
+        sprayScheduler.sprayNow(3000, SPRAY_REASON_MANUAL);
+        });
+    
+    button.attachLongPressStart([]() {
+        Serial.println("Button long-pressed!");
+        handleButtonLongPress();
+        });
+}
+
+void handleButtonLongPress() {
+    while(digitalRead(BUTTON_PIN) == LOW) {
+        led.blink(100);
+    }
+    led.off();
+
+    wifiConfig.mode = WEBSOCKET;
+    setupConnection();
+}
+
 void setupWebSocket() {
     Serial.println("Setting up WebSocket server...");
     if (mqttClient) {

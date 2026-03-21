@@ -12,6 +12,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
@@ -171,7 +172,36 @@ class SettingFragment : Fragment() {
         if (!validateForm()) {
             return
         }
-        viewModel.submitWifiConfig(payload)
+
+        val summary = buildConfigSummary(payload)
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Xác nhận gửi cấu hình")
+            .setMessage(summary)
+            .setNegativeButton("Huỷ", null)
+            .setPositiveButton("Gửi") { _, _ ->
+                viewModel.submitWifiConfig(payload)
+            }
+            .show()
+    }
+
+    private fun buildConfigSummary(payload: WifiConfigPayload): String {
+        return buildString {
+            append("Mode: ")
+            append(modeLabel(payload.mode))
+            append("\nSSID WiFi: ")
+            append(payload.ssid.ifBlank { "(trống)" })
+            append("\nMật khẩu WiFi: ")
+            append(maskValue(payload.password))
+            append("\nSSID AP: ")
+            append(payload.ssidAp.ifBlank { "(trống)" })
+            append("\nMật khẩu AP: ")
+            append(maskValue(payload.passwordAp))
+        }
+    }
+
+    private fun maskValue(value: String): String {
+        if (value.isBlank()) return "(trống)"
+        return "*".repeat(value.length.coerceAtMost(12))
     }
 
     private fun validateForm(): Boolean {
