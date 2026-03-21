@@ -11,7 +11,8 @@
 
 enum SprayReason {
     SPRAY_REASON_SCHEDULED,
-    SPRAY_REASON_MANUAL,
+    SPRAY_REASON_MANUAL_HARDWARE,
+    SPRAY_REASON_MANUAL_APP,
     SPRAY_REASON_OTHER,
 };
 
@@ -37,12 +38,7 @@ private:
     String _pathFolderLog = "";
     String _pathFileNameSprayTotal = "";
 
-    
-    struct LogFileInfo {
-        String path;
-        uint16_t year = 0;
-        uint8_t month = 0;
-    };
+    // LogFileInfo moved to public
 
     SprayDataTotal _sprayDataTotal;
 
@@ -53,13 +49,22 @@ private:
     String logDirWithoutSlash() const;
     void ensureLogDirectoryExists();
     void enforceLogRetention();
-    std::vector<LogFileInfo> collectLogFiles() const;
+    // collectLogFiles moved to public
     bool parseLogFileDate(const String& fileName, uint16_t& year, uint8_t& month) const;
     String buildLogFilePath(const DateTime& timestamp) const;
     String formatTimestamp(const DateTime& timestamp) const;
     String reasonToString(SprayReason reason) const;
 
 public:
+    struct LogFileInfo {
+        String path;
+        uint16_t year = 0;
+        uint8_t month = 0;
+        uint32_t size = 0;
+    };
+    std::vector<LogFileInfo> collectLogFiles() const;
+    String readLogChunk(const String& path, uint32_t offset, size_t maxSize, bool& isEOF) const;
+
     /**
      * Khởi tạo máy phun sương với chân điều khiển cụ thể.
      * @param pin Chân điều khiển máy phun sương.
@@ -186,8 +191,8 @@ inline void SprayController::logSprayEvent(uint32_t durationMs, SprayReason reas
         entry = "time=unknown";
     }
 
-    entry += ",duration_ms=" + String(durationMs);
-    entry += ",reason=" + reasonToString(reason);
+    entry += " | " + reasonToString(reason);
+    entry += " | " + String(durationMs);
 
     file.println(entry);
     file.close();
@@ -265,8 +270,8 @@ inline String SprayController::buildLogFilePath(const DateTime& timestamp) const
 
 inline String SprayController::formatTimestamp(const DateTime& timestamp) const {
     char buffer[25];
-    snprintf(buffer, sizeof(buffer), "%04u-%02u-%02u %02u:%02u:%02u",
-        timestamp.year(), timestamp.month(), timestamp.day(),
+    snprintf(buffer, sizeof(buffer), "%02u-%02u-%04u %02u:%02u:%02u",
+        timestamp.day(), timestamp.month(), timestamp.year(),
         timestamp.hour(), timestamp.minute(), timestamp.second());
     return String(buffer);
 }
@@ -275,8 +280,10 @@ inline String SprayController::reasonToString(SprayReason reason) const {
     switch (reason) {
     case SPRAY_REASON_SCHEDULED:
         return "scheduled";
-    case SPRAY_REASON_MANUAL:
-        return "manual";
+    case SPRAY_REASON_MANUAL_HARDWARE:
+        return "hardware_button";
+    case SPRAY_REASON_MANUAL_APP:
+        return "app_button";
     case SPRAY_REASON_OTHER:
     default:
         return "other";
@@ -344,6 +351,7 @@ inline std::vector<SprayController::LogFileInfo> SprayController::collectLogFile
         }
         info.year = year;
         info.month = month;
+        info.size = dir.fileSize();
         files.push_back(info);
     }
 
@@ -367,4 +375,39 @@ inline void SprayController::enforceLogRetention() {
         LittleFS.remove(files[i].path.c_str());
     }
 }
+
+inline String SprayController::readLogChunk(const String& path, uint32_t offset, size_t maxSize, bool& isEOF) const {
+    isEOF = true;
+    
+    File file = LittleFS.open(path.c_str(), "r");
+    if (!file) {
+        return "";
+    }
+    
+    if (offset >= file.size()) {
+        file.close();
+        return "";
+    }
+    
+    file.seek(offset);
+    
+    size_t bytesToRead = file.size() - offset;
+    if (bytesToRead > maxSize) {
+        bytesToRead = maxSize;
+        isEOF = false;
+    }
+    
+    String chunk;
+    if (bytesToRead > 0) {
+        char* buffer = new char[bytesToRead + 1];
+        size_t actualRead = file.readBytes(buffer, bytesToRead);
+        buffer[actualRead] = '\0';
+        chunk = String(buffer);
+        delete[] buffer;
+    }
+    
+    file.close();
+    return chunk;
+}
+
 #endif

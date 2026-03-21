@@ -65,14 +65,31 @@ class SettingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun getAppButtonDurationMs(): Long {
+        val prefs = getApplication<Application>().getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+        return prefs.getLong("app_button_duration_ms", 1000L)
+    }
+
+    fun submitSystemSettings(appDurationSec: Long, hwDurationSec: Long) {
+        val prefs = getApplication<Application>().getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putLong("app_button_duration_ms", appDurationSec * 1000L).apply()
+
+        viewModelScope.launch {
+            _isProcessing.value = true
+            repository.setSystemSettings(hwDurationSec * 1000L)
+        }
+    }
+
     fun defaultMode(): ModeConnect = ModeConnect.MQTT
 
     private fun observeCommandResults() {
         viewModelScope.launch {
             repository.commandEvents.collect { event ->
                 when (event.command) {
+                    "setTaskEnabledResponse",
                     "setTimeResponse" -> handleTimeResponse(event)
                     "setWiFiConfigResponse" -> handleWifiResponse(event)
+                    "setSystemSettingsResponse" -> handleSettingsResponse(event)
                     "error" -> if (!event.success) {
                         _isProcessing.value = false
                         _messages.tryEmit(event.message ?: "Không thể gửi lệnh tới thiết bị.")
@@ -98,6 +115,15 @@ class SettingViewModel(application: Application) : AndroidViewModel(application)
             _messages.tryEmit(event.message ?: "Đã gửi cấu hình WiFi. Thiết bị sẽ khởi động lại.")
         } else {
             _messages.tryEmit(event.message ?: "Không thể cập nhật WiFi config.")
+        }
+    }
+
+    private fun handleSettingsResponse(event: DeviceCommandEvent.CommandResult) {
+        _isProcessing.value = false
+        if (event.success) {
+            _messages.tryEmit(event.message ?: "Đã lưu cài đặt thời gian phun.")
+        } else {
+            _messages.tryEmit(event.message ?: "Không thể lưu cài đặt thiết bị.")
         }
     }
 }

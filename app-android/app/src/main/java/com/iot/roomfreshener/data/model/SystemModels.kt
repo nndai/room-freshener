@@ -33,7 +33,13 @@ data class SystemInfoSnapshot(
     val wifiMac: String = "",
     val wifiChannel: Int = 0,
     val wifiAutoReconnect: Boolean = false,
-    val wifiSleepMode: Boolean = false
+    val wifiSleepMode: Boolean = false,
+    val fsTotalBytes: Long = 0,
+    val fsUsedBytes: Long = 0,
+    val hwButtonDurationMs: Long = 3000,
+    val configMode: Int = 0,
+    val configSsidAp: String = "",
+    val configSsid: String = ""
 ) {
     fun toFormattedString(): String {
         return """
@@ -65,6 +71,13 @@ data class SystemInfoSnapshot(
             Reset Reason: $resetReason
             Boot Mode: $bootMode
             Vcc: $vccMv mV
+            
+            =================
+            FILE SYSTEM (LITTLEFS)
+            =================
+            Total Space: ${fsTotalBytes / 1024} KB
+            Used Space: ${fsUsedBytes / 1024} KB
+            Free Space: ${(fsTotalBytes - fsUsedBytes) / 1024} KB
             
             =================
             WIFI

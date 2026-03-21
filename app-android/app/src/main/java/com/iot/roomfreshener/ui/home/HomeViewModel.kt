@@ -11,8 +11,11 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import com.iot.roomfreshener.data.remote.DeviceCommandEvent
 
@@ -22,6 +25,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val homeSnapshot: StateFlow<HomeSnapshot?> = repository.homeSnapshot
     val connectionState: StateFlow<DeviceConnectionState> = repository.connectionState
+
+    val activeTasksCount: StateFlow<Int> = repository.tasks
+        .map { list -> list.count { it.enabled } }
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     private val _isProcessing = MutableStateFlow(false)
     val isProcessing: StateFlow<Boolean> = _isProcessing.asStateFlow()
@@ -62,7 +69,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun sprayNow(durationMs: Long = DEFAULT_SPRAY_DURATION_MS) {
+    fun sprayNow() {
+        val prefs = getApplication<Application>().getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+        val durationMs = prefs.getLong("app_button_duration_ms", DEFAULT_SPRAY_DURATION_MS)
         viewModelScope.launch {
             _isProcessing.value = true
             runCatching { repository.sprayNow(durationMs) }
@@ -74,6 +83,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
-        private const val DEFAULT_SPRAY_DURATION_MS = 5_000L
+        private const val DEFAULT_SPRAY_DURATION_MS = 1_000L
     }
 }

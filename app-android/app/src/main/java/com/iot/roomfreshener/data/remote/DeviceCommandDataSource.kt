@@ -8,6 +8,8 @@ import com.iot.roomfreshener.data.model.SprayMoment
 import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskWriteRequest
 import com.iot.roomfreshener.data.model.WifiConfigPayload
+import com.iot.roomfreshener.data.model.LogFileInfo
+import com.iot.roomfreshener.data.model.LogChunk
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -166,6 +168,30 @@ class DeviceCommandDataSource(
         )
     }
 
+    suspend fun setSystemSettings(hwButtonDurationMs: Long) {
+        Log.d(TAG, "setSystemSettings duration=$hwButtonDurationMs")
+        sendJson(
+            JSONObject().apply {
+                put("command", "setSystemSettings")
+                put("hwButtonDurationMs", hwButtonDurationMs)
+            }
+        )
+    }
+
+    suspend fun requestLogFiles() {
+        Log.d(TAG, "requestLogFiles()")
+        sendJson(JSONObject().apply { put("command", "getLogFiles") })
+    }
+
+    suspend fun readLogFile(name: String, offset: Long) {
+        Log.d(TAG, "readLogFile() name=$name offset=$offset")
+        sendJson(JSONObject().apply {
+            put("command", "readLogFile")
+            put("name", name)
+            put("offset", offset)
+        })
+    }
+
     private suspend fun sendJson(json: JSONObject) {
         val payload = json.toString()
         Log.v(TAG, "sendJson payload=${payload.take(128)}")
@@ -192,13 +218,16 @@ class DeviceCommandDataSource(
                 "getHomeDataResponse" -> emitHome(json)
                 "getEspInfoResponse" -> emitSystemInfo(json)
                 "getTimeResponse" -> emitDeviceTime(json)
+                "getLogFilesResponse" -> emitLogFiles(json)
+                "readLogFileResponse" -> emitLogChunk(json)
                 "addTaskSprayResponse",
                 "removeTaskSprayResponse",
                 "editTaskSprayResponse",
                 "setTaskEnabledResponse",
                 "setTimeResponse",
                 "sprayNowResponse",
-                "setWiFiConfigResponse" -> emitCommandResult(command, json)
+                "setWiFiConfigResponse",
+                "setSystemSettingsResponse" -> emitCommandResult(command, json)
                 else -> Unit
             }
         } catch (ex: JSONException) {
@@ -262,7 +291,13 @@ class DeviceCommandDataSource(
             wifiMac = json.optString("wifiMac", ""),
             wifiChannel = json.optInt("wifiChannel", 0),
             wifiAutoReconnect = json.optBoolean("wifiAutoReconnect", false),
-            wifiSleepMode = json.optBoolean("wifiSleepMode", false)
+            wifiSleepMode = json.optBoolean("wifiSleepMode", false),
+            fsTotalBytes = json.optLong("fsTotalBytes", 0),
+            fsUsedBytes = json.optLong("fsUsedBytes", 0),
+            hwButtonDurationMs = json.optLong("hwButtonDurationMs", 3000),
+            configMode = json.optInt("configMode", 0),
+            configSsidAp = json.optString("configSsidAp", ""),
+            configSsid = json.optString("configSsid", "")
         )
         _events.tryEmit(DeviceCommandEvent.SystemInfo(info))
     }
@@ -275,6 +310,29 @@ class DeviceCommandDataSource(
                 message = json.optString("message")
             )
         )
+    }
+
+    private fun emitLogFiles(json: JSONObject) {
+        val filesArray = json.optJSONArray("files") ?: return
+        val list = mutableListOf<LogFileInfo>()
+        for (i in 0 until filesArray.length()) {
+            val obj = filesArray.optJSONObject(i) ?: continue
+            list.add(LogFileInfo(
+                name = obj.optString("name", ""),
+                size = obj.optLong("size", 0L)
+            ))
+        }
+        _events.tryEmit(DeviceCommandEvent.LogFilesList(list))
+    }
+
+    private fun emitLogChunk(json: JSONObject) {
+        val chunk = LogChunk(
+            name = json.optString("name", ""),
+            offset = json.optLong("offset", 0L),
+            data = json.optString("data", ""),
+            isEOF = json.optBoolean("isEOF", false)
+        )
+        _events.tryEmit(DeviceCommandEvent.LogFileChunkEvent(chunk))
     }
 
     private fun parseTasks(json: JSONObject): List<Task> {

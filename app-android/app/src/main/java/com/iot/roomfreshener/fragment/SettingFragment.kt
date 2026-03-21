@@ -40,6 +40,9 @@ class SettingFragment : Fragment() {
     private lateinit var etPasswordAp: TextInputEditText
     private lateinit var etSsid: TextInputEditText
     private lateinit var etPassword: TextInputEditText
+    private lateinit var etAppDuration: TextInputEditText
+    private lateinit var etHwDuration: TextInputEditText
+    private lateinit var btnSubmitDurations: MaterialButton
     private lateinit var inputModeLayout: TextInputLayout
     private lateinit var inputSsidApLayout: TextInputLayout
     private lateinit var inputPasswordApLayout: TextInputLayout
@@ -49,6 +52,7 @@ class SettingFragment : Fragment() {
     private lateinit var tvSystemInfo: TextView
 
     private var selectedMode: ModeConnect = ModeConnect.WEBSOCKET
+    private var isPrefilled = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -60,6 +64,10 @@ class SettingFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         bindViews(view)
         setupModeDropdown()
+        
+        val currentAppMs = viewModel.getAppButtonDurationMs()
+        etAppDuration.setText((currentAppMs / 1000).toString())
+
         observeState()
         bindInteractions()
     }
@@ -73,6 +81,9 @@ class SettingFragment : Fragment() {
         etPasswordAp = root.findViewById(R.id.etPasswordAp)
         etSsid = root.findViewById(R.id.etSsid)
         etPassword = root.findViewById(R.id.etPassword)
+        etAppDuration = root.findViewById(R.id.etAppDuration)
+        etHwDuration = root.findViewById(R.id.etHwDuration)
+        btnSubmitDurations = root.findViewById(R.id.btnSubmitDurations)
         inputModeLayout = root.findViewById(R.id.inputModeLayout)
         inputSsidApLayout = root.findViewById(R.id.inputSsidApLayout)
         inputPasswordApLayout = root.findViewById(R.id.inputPasswordApLayout)
@@ -92,6 +103,15 @@ class SettingFragment : Fragment() {
         }
         btnSubmitConfig.setOnClickListener {
             submitConfig()
+        }
+        btnSubmitDurations.setOnClickListener {
+            val appVal = etAppDuration.text?.toString()?.toLongOrNull()
+            val hwVal = etHwDuration.text?.toString()?.toLongOrNull()
+            if (appVal != null && hwVal != null) {
+                viewModel.submitSystemSettings(appVal, hwVal)
+            } else {
+                Snackbar.make(requireView(), "Vui lòng nhập thời gian hợp lệ", Snackbar.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -122,6 +142,17 @@ class SettingFragment : Fragment() {
                     viewModel.systemInfoSnapshot.collect { info ->
                         if (info != null) {
                             tvSystemInfo.text = info.toFormattedString()
+                            if (!etHwDuration.hasFocus() && etHwDuration.text.isNullOrBlank()) {
+                                etHwDuration.setText((info.hwButtonDurationMs / 1000).toString())
+                            }
+                            if (!isPrefilled) {
+                                isPrefilled = true
+                                if (etSsidAp.text.isNullOrBlank()) etSsidAp.setText(info.configSsidAp)
+                                if (etSsid.text.isNullOrBlank()) etSsid.setText(info.configSsid)
+                                val mode = if (info.configMode == 1) ModeConnect.MQTT else ModeConnect.WEBSOCKET
+                                selectedMode = mode
+                                etMode.setText(modeLabel(mode), false)
+                            }
                         } else {
                             tvSystemInfo.text = "Đang tải..."
                         }

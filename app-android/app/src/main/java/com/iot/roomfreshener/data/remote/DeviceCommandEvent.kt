@@ -3,6 +3,8 @@ package com.iot.roomfreshener.data.remote
 import com.iot.roomfreshener.data.model.HomeSnapshot
 import com.iot.roomfreshener.data.model.SystemInfoSnapshot
 import com.iot.roomfreshener.data.model.Task
+import com.iot.roomfreshener.data.model.LogFileInfo
+import com.iot.roomfreshener.data.model.LogChunk
 
 sealed interface DeviceCommandEvent {
     data class Snapshot(val tasks: List<Task>) : DeviceCommandEvent
@@ -15,4 +17,6 @@ sealed interface DeviceCommandEvent {
         val message: String? = null
     ) : DeviceCommandEvent
     data class Failure(val message: String) : DeviceCommandEvent
+    data class LogFilesList(val files: List<LogFileInfo>) : DeviceCommandEvent
+    data class LogFileChunkEvent(val chunk: LogChunk) : DeviceCommandEvent
 }

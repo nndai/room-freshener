@@ -49,7 +49,7 @@ class EditTaskDialog(
                 id = task?.id ?: 0L,
                 hour = hourPicker.value,
                 minute = minutePicker.value,
-                durationSeconds = durationInput.text?.toString()?.toIntOrNull()?.takeIf { it > 0 } ?: 30,
+                durationSeconds = durationInput.text?.toString()?.toIntOrNull()?.takeIf { it > 0 } ?: 1,
                 repeatDays = selectedDays.sorted().map { dayLetters[it] },
                 enabled = task?.enabled ?: true
             )
@@ -72,7 +72,7 @@ class EditTaskDialog(
     private fun setupInitialValues() {
         hourPicker.value = task?.hour ?: 7
         minutePicker.value = task?.minute ?: 0
-        durationInput.setText((task?.durationSeconds ?: 30).toString())
+        durationInput.setText((task?.durationSeconds ?: 1).toString())
     }
 
     private fun inflateDayViews() {

@@ -10,12 +10,13 @@ enum ModeConnect {
     MQTT,
 };
 
-struct WiFiConfig {
+struct SystemConfig {
     ModeConnect mode;
     String ssidAp;
     String passwordAp;
     String ssid;
     String password;
+    uint32_t hwButtonDurationMs;
 };
 
 #define VERSION "1.0"
@@ -35,7 +36,7 @@ struct WiFiConfig {
 #define PATH_FILENAME_SPRAY_DATA_TOTAL "/datas/sprayDataTotal.bin"
 
 #define WIFIAP_SSID_DEFAULT "MÁY XỊT PHÒNG"
-#define WIFIAP_PASSWORD_DEFAULT "123456788"
+#define WIFIAP_PASSWORD_DEFAULT "12345678"
 
 #define TLS_MQTT_URL "0bab47da6e4b4af7a0a58dcce1c70db2.s1.eu.hivemq.cloud"
 #define TLS_MQTT_PORT 8883
@@ -54,55 +55,52 @@ struct WiFiConfig {
 #define TIME_ZONE +7 // Vietnam time zone UTC+7
 #define CONVERT_TO_LOCAL_TIME(dt) ((dt) + TimeSpan(TIME_ZONE * 3600))
 
-void loadWiFiConfig(WiFiConfig& wifiConfig) {
-    Serial.print("Loading WiFi configuration...");
+void loadSystemConfig(SystemConfig& systemConfig) {
+    Serial.print("Loading System configuration...");
     File file = LittleFS.open(PATH_FILENAME_WIFI_CONFIG, "r");
     if (!file) {
-        Serial.println(" ---> No WiFi config file found. Using default settings.");
+        Serial.println(" ---> No config file found. Using default settings.");
         return;
     }
 
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, file);
     if (error) {
-        Serial.print(" ---> Failed to deserializeJson WiFi config file: ");
+        Serial.print(" ---> Failed to deserializeJson config file: ");
         Serial.println(error.f_str());
         file.close();
         return;
     }
 
-    wifiConfig.mode = doc["mode"] | WEBSOCKET;
-    wifiConfig.ssidAp = doc["ssidAp"] | WIFIAP_SSID_DEFAULT;
-    wifiConfig.passwordAp = doc["passwordAp"] | WIFIAP_PASSWORD_DEFAULT;
-    wifiConfig.ssid = doc["ssid"] | "";
-    wifiConfig.password = doc["password"] | "";
+    systemConfig.mode = doc["mode"] | WEBSOCKET;
+    systemConfig.ssidAp = doc["ssidAp"] | WIFIAP_SSID_DEFAULT;
+    systemConfig.passwordAp = doc["passwordAp"] | WIFIAP_PASSWORD_DEFAULT;
+    systemConfig.ssid = doc["ssid"] | "";
+    systemConfig.password = doc["password"] | "";
+    systemConfig.hwButtonDurationMs = doc["hwButtonDurationMs"] | 1000;
 
-    if (wifiConfig.mode != WEBSOCKET && wifiConfig.mode != MQTT) {
-        wifiConfig.mode = WEBSOCKET;
+    if (systemConfig.mode != WEBSOCKET && systemConfig.mode != MQTT) {
+        systemConfig.mode = WEBSOCKET;
     }
     Serial.println(" ---> success.");
-    Serial.print("Mode: "); Serial.println(wifiConfig.mode == WEBSOCKET ? "WEBSOCKET" : "MQTT");
-    Serial.print("SSID: "); Serial.println(wifiConfig.ssid);
+    Serial.print("Mode: "); Serial.println(systemConfig.mode == WEBSOCKET ? "WEBSOCKET" : "MQTT");
+    Serial.print("SSID: "); Serial.println(systemConfig.ssid);
 
-    String masked;
-    masked.reserve(wifiConfig.password.length());
-    for (size_t i = 0; i < wifiConfig.password.length(); i++) {
-        masked += '*';
-    }
-    Serial.print("Password: "); Serial.println(masked);
-    Serial.print("AP SSID: "); Serial.println(wifiConfig.ssidAp);
-    Serial.print("AP Password: "); Serial.println(wifiConfig.passwordAp);
+    Serial.print("Password: "); Serial.println(systemConfig.password.length() > 0 ? "******" : "(empty)");
+    Serial.print("AP SSID: "); Serial.println(systemConfig.ssidAp);
+    Serial.print("AP Password: "); Serial.println(systemConfig.passwordAp);
     file.close();
 }
 
-void saveWiFiConfig(const WiFiConfig& wifiConfig) {
-    Serial.print("Saving WiFi configuration...");
+void saveSystemConfig(const SystemConfig& systemConfig) {
+    Serial.print("Saving System configuration...");
     JsonDocument doc;
-    doc["mode"] = wifiConfig.mode;
-    doc["ssidAp"] = wifiConfig.ssidAp;
-    doc["passwordAp"] = wifiConfig.passwordAp;
-    doc["ssid"] = wifiConfig.ssid;
-    doc["password"] = wifiConfig.password;
+    doc["mode"] = systemConfig.mode;
+    doc["ssidAp"] = systemConfig.ssidAp;
+    doc["passwordAp"] = systemConfig.passwordAp;
+    doc["ssid"] = systemConfig.ssid;
+    doc["password"] = systemConfig.password;
+    doc["hwButtonDurationMs"] = systemConfig.hwButtonDurationMs;
     File file = LittleFS.open(PATH_FILENAME_WIFI_CONFIG, "w");
     serializeJson(doc, file);
     file.close();

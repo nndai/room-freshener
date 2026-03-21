@@ -35,6 +35,7 @@ class HomeFragment : Fragment() {
     private lateinit var tvNextSprayCountdown: TextView
     private lateinit var tvSprayMode: TextView
     private lateinit var tvTotalSprays: TextView
+    private lateinit var tvCyclesPerDay: TextView
     private lateinit var btnSprayNow: MaterialButton
     private lateinit var overlayLoading: View
     private lateinit var tvLatency: TextView
@@ -61,6 +62,7 @@ class HomeFragment : Fragment() {
         tvNextSprayCountdown = root.findViewById(R.id.tvNextSprayCountdown)
         tvSprayMode = root.findViewById(R.id.tvSprayMode)
         tvTotalSprays = root.findViewById(R.id.tvTotalSprays)
+        tvCyclesPerDay = root.findViewById(R.id.tvCyclesPerDay)
         btnSprayNow = root.findViewById(R.id.btnSprayNow)
         overlayLoading = root.findViewById(R.id.overlayLoading)
         tvLatency = root.findViewById(R.id.tvLatency)
@@ -70,25 +72,30 @@ class HomeFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 launch {
-                    viewModel.homeSnapshot.collect { snapshot ->
+                    viewModel.homeSnapshot.collect { snapshot: HomeSnapshot? ->
                         renderSnapshot(snapshot)
                     }
                 }
                 launch {
-                    viewModel.isProcessing.collect { isProcessing ->
+                    viewModel.isProcessing.collect { isProcessing: Boolean ->
                         overlayLoading.visibility = if (isProcessing) View.VISIBLE else View.GONE
                     }
                 }
                 launch {
-                    viewModel.latencyMs.collect { latency ->
+                    viewModel.latencyMs.collect { latency: Long? ->
                         tvLatency.text = if (latency != null) "Ping: ${latency}ms" else "Ping: --"
                     }
                 }
                 launch {
-                    viewModel.messages.collect { message ->
+                    viewModel.messages.collect { message: String ->
                         if (message.isNotBlank()) {
-                            Snackbar.make(requireView(), message, Snackbar.LENGTH_SHORT).show()
+                            Snackbar.make(requireView(), message as CharSequence, Snackbar.LENGTH_SHORT).show()
                         }
+                    }
+                }
+                launch {
+                    viewModel.activeTasksCount.collect { count: Int ->
+                        tvCyclesPerDay.text = "Chu kỳ: $count lần/ngày"
                     }
                 }
                 launch {
@@ -163,9 +170,10 @@ class HomeFragment : Fragment() {
 
     private fun mapReason(reason: Int): String {
         return when (reason) {
-            0 -> "Tự động"
-            1 -> "Thủ công"
-            else -> "Khác"
+            0 -> "Auto Task"
+            1 -> "Hardware Button"
+            2 -> "App Button"
+            else -> "Other"
         }
     }
 

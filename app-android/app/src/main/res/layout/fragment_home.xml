@@ -183,7 +183,7 @@
                     android:text="Cách đây 01 giờ 45 phút"
                     android:textColor="#5F6368"
                     android:textSize="13sp" />
-                
+
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -194,7 +194,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Chế độ:"
+                        android:text="Mode:"
                         android:textColor="#9AA0A6"
                         android:textSize="13sp" />
 
@@ -202,10 +202,10 @@
                         android:id="@+id/tvSprayMode"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:paddingHorizontal="12dp"
+                        android:layout_marginStart="4dp"
+                        android:paddingHorizontal="0dp"
                         android:paddingVertical="6dp"
-                        android:text="Tự động"
+                        android:text="Other"
                         android:textColor="#0F9D58"
                         android:textSize="13sp"
                         android:textStyle="bold"
@@ -293,9 +293,10 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/tvCyclesPerDay"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Chu kỳ: 4 lần/ngày"
+                android:text="Chu kỳ: -- lần/ngày"
                 android:textColor="#5F6368"
                 android:textSize="14sp" />
         </LinearLayout>

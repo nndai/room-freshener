@@ -6,6 +6,8 @@ import com.iot.roomfreshener.data.model.SystemInfoSnapshot
 import com.iot.roomfreshener.data.model.Task
 import com.iot.roomfreshener.data.model.TaskWriteRequest
 import com.iot.roomfreshener.data.model.WifiConfigPayload
+import com.iot.roomfreshener.data.model.LogFileInfo
+import com.iot.roomfreshener.data.model.LogChunk
 import com.iot.roomfreshener.data.remote.DeviceChannel
 import com.iot.roomfreshener.data.remote.DeviceCommandDataSource
 import com.iot.roomfreshener.data.remote.DeviceCommandEvent
@@ -51,6 +53,16 @@ class DeviceControlRepository(
     )
     val commandEvents: SharedFlow<DeviceCommandEvent.CommandResult> = _commandEvents.asSharedFlow()
 
+    private val _logFilesEvents = MutableSharedFlow<List<LogFileInfo>>(
+        replay = 0, extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val logFilesEvents: SharedFlow<List<LogFileInfo>> = _logFilesEvents.asSharedFlow()
+
+    private val _logChunkEvents = MutableSharedFlow<LogChunk>(
+        replay = 0, extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val logChunkEvents: SharedFlow<LogChunk> = _logChunkEvents.asSharedFlow()
+
     val connectionState: StateFlow<DeviceConnectionState> = deviceChannel.state
 
     init {
@@ -65,6 +77,8 @@ class DeviceControlRepository(
                     is DeviceCommandEvent.Home -> _homeSnapshot.value = event.snapshot
                     is DeviceCommandEvent.SystemInfo -> _systemInfoSnapshot.value = event.info
                     is DeviceCommandEvent.DeviceTime -> _deviceTimeSeconds.value = event.timestampSeconds
+                    is DeviceCommandEvent.LogFilesList -> _logFilesEvents.emit(event.files)
+                    is DeviceCommandEvent.LogFileChunkEvent -> _logChunkEvents.emit(event.chunk)
                     is DeviceCommandEvent.CommandResult -> _commandEvents.emit(event)
                     is DeviceCommandEvent.Failure -> _commandEvents.emit(
                         DeviceCommandEvent.CommandResult(
@@ -130,6 +144,11 @@ class DeviceControlRepository(
         remote.requestSystemInfo()
     }
 
+    suspend fun setSystemSettings(durationMs: Long) {
+        Log.d(TAG, "setSystemSettings() hwDuration=$durationMs")
+        remote.setSystemSettings(durationMs)
+    }
+
     suspend fun requestDeviceTime() {
         Log.d(TAG, "requestDeviceTime()")
         remote.requestDeviceTime()
@@ -143,6 +162,16 @@ class DeviceControlRepository(
     suspend fun updateWifiConfig(payload: WifiConfigPayload) {
         Log.d(TAG, "updateWifiConfig() mode=${payload.mode}")
         remote.updateWifiConfig(payload)
+    }
+
+    suspend fun requestLogFiles() {
+        Log.d(TAG, "requestLogFiles()")
+        remote.requestLogFiles()
+    }
+
+    suspend fun readLogFile(name: String, offset: Long) {
+        Log.d(TAG, "readLogFile() name=$name offset=$offset")
+        remote.readLogFile(name, offset)
     }
 
     fun reconnect() {

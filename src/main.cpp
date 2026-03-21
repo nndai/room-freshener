@@ -17,12 +17,13 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
-WiFiConfig wifiConfig = {
+SystemConfig systemConfig = {
     WEBSOCKET,
     WIFIAP_SSID_DEFAULT,
     WIFIAP_PASSWORD_DEFAULT,
     "",
-    ""
+    "",
+    1000,
 };
 ADC_MODE(ADC_VCC);
 
@@ -53,6 +54,8 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length);
 void printEspInfo();
 String getEspInfo();
 void printBanner();
+void setupButton();
+void handleButtonLongPress();
 
 //======================== Tasks =============================
 Task* taskUpdateSprayScheduler;
@@ -83,8 +86,9 @@ void setup() {
         Serial.println("RTC is NOT running");
     }
 
+    setupButton();
     setupTask();
-    loadWiFiConfig(wifiConfig);
+    loadSystemConfig(systemConfig);
 
     sprayScheduler.load();
     sprayController.loadSprayDataTotal();
@@ -245,7 +249,7 @@ void setupTask() {
                 taskRequestWifiInet->enable();
             }
 
-            if (wifiConfig.mode == MQTT) {
+            if (systemConfig.mode == MQTT) {
                 setupMqtt();
             }
             taskConnectWiFi->disable();
@@ -280,11 +284,10 @@ void setupTask() {
 void setupButton() {
     button.attachClick([]() {
         Serial.println("Button clicked!");
-        sprayScheduler.sprayNow(3000, SPRAY_REASON_MANUAL);
+        sprayScheduler.sprayNow(systemConfig.hwButtonDurationMs, SPRAY_REASON_MANUAL_HARDWARE);
         });
     
     button.attachLongPressStart([]() {
-        Serial.println("Button long-pressed!");
         handleButtonLongPress();
         });
 }
@@ -298,7 +301,7 @@ void handleButtonLongPress() {
         delay(200);
     }
 
-    wifiConfig.mode = WEBSOCKET;
+    systemConfig.mode = WEBSOCKET;
     setupConnection();
 }
 
@@ -355,21 +358,21 @@ void setupConnection() {
         taskRequestWifiInet->disable();
     }
 
-    if (wifiConfig.mode == WEBSOCKET) {
+    if (systemConfig.mode == WEBSOCKET) {
         WiFi.mode(WIFI_AP);
-        WiFi.softAP(wifiConfig.ssidAp.c_str(), wifiConfig.passwordAp.c_str());
+        WiFi.softAP(systemConfig.ssidAp.c_str(), systemConfig.passwordAp.c_str());
         Serial.println("Access Point has been activated!");
-        Serial.print("SSID: "); Serial.println(wifiConfig.ssidAp);
+        Serial.print("SSID: "); Serial.println(systemConfig.ssidAp);
         Serial.print("IPAP: "); Serial.println(WiFi.softAPIP());
         setupWebSocket();
     }
     else {
         WiFi.mode(WIFI_STA);
-        if (wifiConfig.password.length() == 0) {
-            WiFi.begin(wifiConfig.ssid.c_str());
+        if (systemConfig.password.length() == 0) {
+            WiFi.begin(systemConfig.ssid.c_str());
         }
         else {
-            WiFi.begin(wifiConfig.ssid.c_str(), wifiConfig.password.c_str());
+            WiFi.begin(systemConfig.ssid.c_str(), systemConfig.password.c_str());
         }
         Serial.println("Connecting to WiFi...");
         taskConnectWiFi->enable();
@@ -395,7 +398,7 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, payload);
     if (error) {
-        Serial.print(F("deserializeJson() failed: "));
+        Serial.print("deserializeJson() failed: ");
         Serial.println(error.f_str());
         return;
     }
@@ -413,6 +416,8 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         getHomeData
         setWiFiConfig
         getEspInfo
+        getLogFiles
+        readLogFile
     */
 
     String command = doc["command"] | "";
@@ -439,7 +444,7 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
      */
     if (command == "sprayNow") {
         uint32_t duration = doc["duration"] | 1000;
-        sprayScheduler.sprayNow(duration, SPRAY_REASON_MANUAL);
+        sprayScheduler.sprayNow(duration, SPRAY_REASON_MANUAL_APP);
         Serial.printf("Spraying for %u ms\n", duration);
         JsonDocument responseDoc;
         responseDoc["command"] = "sprayNowResponse";
@@ -813,35 +818,35 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
 
         // If SSID is empty, keep the old value
         if (ssidAp.length() < 1) {
-            ssidAp = wifiConfig.ssidAp;
-            passwordAp = wifiConfig.passwordAp;
+            ssidAp = systemConfig.ssidAp;
+            passwordAp = systemConfig.passwordAp;
         }
 
         if (ssid.length() < 1) {
-            ssid = wifiConfig.ssid;
-            password = wifiConfig.password;
+            ssid = systemConfig.ssid;
+            password = systemConfig.password;
         }
 
-        if(wifiConfig.mode == mode && wifiConfig.ssidAp == ssidAp && wifiConfig.passwordAp == passwordAp &&
-           wifiConfig.ssid == ssid && wifiConfig.password == password) {
+        if(systemConfig.mode == mode && systemConfig.ssidAp == ssidAp && systemConfig.passwordAp == passwordAp &&
+           systemConfig.ssid == ssid && systemConfig.password == password) {
             Serial.println("WiFi configuration is the same as the current one. No changes made.");
             String responseStr = "{\"command\":\"setWiFiConfigResponse\",\"status\":true,\"message\":\"WiFi configuration is the same as the current one. No changes needed.\"}";
             sendMessage(num, responseStr);
             return;
         }
 
-        wifiConfig.ssidAp = ssidAp;
-        wifiConfig.passwordAp = passwordAp;
-        wifiConfig.ssid = ssid;
-        wifiConfig.password = password;
-        wifiConfig.mode = static_cast<ModeConnect>(mode);
+        systemConfig.ssidAp = ssidAp;
+        systemConfig.passwordAp = passwordAp;
+        systemConfig.ssid = ssid;
+        systemConfig.password = password;
+        systemConfig.mode = static_cast<ModeConnect>(mode);
 
-        saveWiFiConfig(wifiConfig);
+        saveSystemConfig(systemConfig);
 
         String responseStr = "{\"command\":\"setWiFiConfigResponse\",\"status\":true,\"message\":\"WiFi configuration updated. Rebooting...\"}";
         sendMessage(num, responseStr);
 
-        Serial.println("WiFi configuration updated. Rebooting...");
+        Serial.println("WiFi config updated. Rebooting...");
         delay(1000);
         ESP.restart();
     }
@@ -883,6 +888,16 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         responseDoc["flashChipSpeedMHz"] = ESP.getFlashChipSpeed() / 1000000;
         responseDoc["flashChipMode"] = ESP.getFlashChipMode();
 
+        // File System
+        FSInfo fs_info;
+        if (LittleFS.info(fs_info)) {
+            responseDoc["fsTotalBytes"] = fs_info.totalBytes;
+            responseDoc["fsUsedBytes"] = fs_info.usedBytes;
+        } else {
+            responseDoc["fsTotalBytes"] = 0;
+            responseDoc["fsUsedBytes"] = 0;
+        }
+
         // Memory
         responseDoc["freeHeap"] = ESP.getFreeHeap();
         responseDoc["heapFragmentation"] = ESP.getHeapFragmentation();
@@ -898,6 +913,12 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         responseDoc["bootMode"] = ESP.getBootMode();
         responseDoc["vccMv"] = ESP.getVcc();
         responseDoc["appVersion"] = VERSION;
+
+        // System Config
+        responseDoc["hwButtonDurationMs"] = systemConfig.hwButtonDurationMs;
+        responseDoc["configMode"] = systemConfig.mode;
+        responseDoc["configSsidAp"] = systemConfig.ssidAp;
+        responseDoc["configSsid"] = systemConfig.ssid;
 
         // WiFi
         responseDoc["wifiSsid"] = WiFi.SSID();
@@ -933,6 +954,84 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         sendMessage(num, jsonStr);
     }
 
+    /**
+     * Xử lý lệnh lấy danh sách file log
+     * example:
+     * received JSON:
+     * {
+     *   "command": "getLogFiles"
+     * }
+     */
+    else if (command == "getLogFiles") {
+        std::vector<SprayController::LogFileInfo> files = sprayController.collectLogFiles();
+        
+        JsonDocument responseDoc;
+        responseDoc["command"] = "getLogFilesResponse";
+        JsonArray filesArray = responseDoc["files"].to<JsonArray>();
+        
+        for (const auto& info : files) {
+            JsonObject fileObj = filesArray.add<JsonObject>();
+            fileObj["name"] = info.path;
+            fileObj["size"] = info.size;
+        }
+        
+        String jsonStr;
+        serializeJson(responseDoc, jsonStr);
+        sendMessage(num, jsonStr);
+    }
+
+    /**
+     * Xử lý lệnh đọc từng phần của file log
+     * example:
+     * received JSON:
+     * {
+     *   "command": "readLogFile",
+     *   "name": "/logs/spray/log-3-2026.log",
+     *   "offset": 0
+     * }
+     */
+    else if (command == "readLogFile") {
+        String name = doc["name"] | "";
+        uint32_t offset = doc["offset"] | 0;
+        
+        if (name == "") {
+            String responseStr = "{\"command\":\"readLogFileResponse\",\"status\":false,\"message\":\"Missing file name.\"}";
+            sendMessage(num, responseStr);
+            return;
+        }
+        
+        bool isEOF = false;
+        String data = sprayController.readLogChunk(name, offset, 512, isEOF);
+        
+        JsonDocument responseDoc;
+        responseDoc["command"] = "readLogFileResponse";
+        responseDoc["name"] = name;
+        responseDoc["offset"] = offset + data.length();
+        responseDoc["data"] = data;
+        responseDoc["isEOF"] = isEOF;
+        
+        String jsonStr;
+        serializeJson(responseDoc, jsonStr);
+        sendMessage(num, jsonStr);
+    }
+    else if (command == "setSystemSettings") {
+        uint32_t duration = doc["hwButtonDurationMs"] | 1000;
+        systemConfig.hwButtonDurationMs = duration;
+        saveSystemConfig(systemConfig);
+        
+        Serial.printf("System settings updated: HW button duration = %u ms\n", duration);
+
+        JsonDocument responseDoc;
+        responseDoc["command"] = "setSystemSettingsResponse";
+        responseDoc["status"] = true;
+        responseDoc["message"] = "Cấu hình hệ thống đã được lưu";
+
+        String responseStr;
+        serializeJson(responseDoc, responseStr);
+        sendMessage(num, responseStr);
+        return;
+    }
+
     else {
         Serial.printf("Unknown command: %s\n", command.c_str());
         String responseStr = "{\"command\":\"unknownCommandResponse\",\"status\":false,\"message\":\"Unknown command.\"}";
@@ -955,7 +1054,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         break;
 
     case WStype_BIN:
-        Serial.printf("[%u] Received binary data of length: %u\n", num, length);
+        Serial.printf("[%u] Received binary, length: %u\n", num, length);
         break;
 
     default:

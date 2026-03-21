@@ -110,8 +110,6 @@ class WifiInetManager {
         http.setTimeout(2000);
 
         Serial.println("Logging in WIFI INET...");
-        Serial.print("Ram: ");
-        Serial.println(ESP.getFreeHeap());
 
         String gw = WiFi.gatewayIP().toString();
         if (gw == "0.0.0.0" || gw.length() == 0) {
@@ -125,8 +123,6 @@ class WifiInetManager {
         int code = http.GET();
         if (code <= 0) {
             Serial.println("[-] Lỗi kết nối Router: " + String(code));
-            Serial.print("Ram: ");
-            Serial.println(ESP.getFreeHeap());
             http.end();
             return false;
         }
@@ -193,10 +189,10 @@ class WifiInetManager {
         http.end();
 
         if (httpCode == 200 || httpCode == 302) {
-            Serial.println("[SUCCESS] Đã đăng nhập thành công!");
+            Serial.println("[SUCCESS] Login WiFi INET successful!");
             return true;
         }
-        Serial.println("[FAILED] Đăng nhập thất bại. HTTP Code: " + String(httpCode));
+        Serial.println("[FAILED] Login WiFi INET failed. HTTP Code: " + String(httpCode));
         return false;
     }
 
@@ -220,10 +216,6 @@ class WifiInetManager {
         return false;
     }
 
-    void handleInternetCheck(bool allowLogin)
-    {
-
-    }
 
 public:
     WifiInetManager() {
@@ -342,7 +334,7 @@ public:
                 current_state = STATE_IDLE_WAIT;
             }
             else {
-                Serial.println("Status: Error (Login OK but no inet. Checking...)");
+                Serial.println("Status: Login OK but no inet...");
                 setWait(3000, STATE_VERIFY_INTERNET_LOOP);
                 verify_attempt = 0;
             }
