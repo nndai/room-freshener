@@ -290,10 +290,13 @@ void setupButton() {
 }
 
 void handleButtonLongPress() {
-    while(digitalRead(BUTTON_PIN) == LOW) {
-        led.blink(100);
-    }
     led.off();
+    while(digitalRead(BUTTON_PIN) == LOW) {
+        led.on();
+        delay(200);
+        led.off();
+        delay(200);
+    }
 
     wifiConfig.mode = WEBSOCKET;
     setupConnection();
