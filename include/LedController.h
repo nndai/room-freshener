@@ -46,7 +46,10 @@ public:
      * @param intervalMs Khoảng thời gian nhấp nháy tính bằng mili giây.
      */
     void blink(uint32_t intervalMs) {
+        if (_state == BLINK && intervalMs == _blinkInterval)
+            return;
         _blinkInterval = intervalMs;
+        _state = BLINK;
         _lastToggleTime = millis();
     }
 

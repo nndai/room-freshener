@@ -65,7 +65,7 @@ class SettingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun defaultMode(): ModeConnect = ModeConnect.WEBSOCKET
+    fun defaultMode(): ModeConnect = ModeConnect.MQTT
 
     private fun observeCommandResults() {
         viewModelScope.launch {

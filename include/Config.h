@@ -37,18 +37,19 @@ struct WiFiConfig {
 #define WIFIAP_SSID_DEFAULT "MÁY XỊT PHÒNG"
 #define WIFIAP_PASSWORD_DEFAULT "123456788"
 
-#define TLS_MQTT_URL "..."
+#define TLS_MQTT_URL "0bab47da6e4b4af7a0a58dcce1c70db2.s1.eu.hivemq.cloud"
 #define TLS_MQTT_PORT 8883
-#define TLS_MQTT_USERNAME "..."
-#define TLS_MQTT_PASSWORD "..."
-#define MQTT_TOPIC_RECEIVE "..."
-#define MQTT_TOPIC_SEND "..."
+#define TLS_MQTT_USERNAME "dai05"
+#define TLS_MQTT_PASSWORD "Daicredentials1"
+#define MQTT_TOPIC_RECEIVE "roomFreshener/command"
+#define MQTT_TOPIC_SEND "roomFreshener/response"
 
 #define MQTT_MAX_PACKET_SIZE_OVERRIDE 3000
 #define MQTT_SOCKET_TIMEOUT_OVERRIDE 7
 
 #define _TASK_SLEEP_ON_IDLE_RUN
 #define _TASK_STD_FUNCTION
+#define _TASK_SCHEDULING_OPTIONS
 
 #define TIME_ZONE +7 // Vietnam time zone UTC+7
 #define CONVERT_TO_LOCAL_TIME(dt) ((dt) + TimeSpan(TIME_ZONE * 3600))

@@ -160,7 +160,6 @@ void setupTask() {
     Serial.println("Setting up tasks...");
     taskUpdateSprayScheduler = new Task(2000, TASK_FOREVER, []() {
         if (!rtc.isrunning()) {
-
             if ((isWifiInetConnected() && isInternetWifiInetConnected()) ||
                 (!isWifiInetConnected() && WiFi.status() == WL_CONNECTED && WiFi.getMode() != WIFI_AP)) {
 
@@ -187,20 +186,25 @@ void setupTask() {
         }
         sprayScheduler.update();
         }, &mainScheduler, true);
+    taskUpdateSprayScheduler->setSchedulingOption(TASK_INTERVAL);
 
     taskSprayControllerUpdate = new Task(500, TASK_FOREVER, []() {
         sprayController.update();
         }, &mainScheduler, true);
+    taskSprayControllerUpdate->setSchedulingOption(TASK_INTERVAL);
 
     taskUpdateLed = new Task(10, TASK_FOREVER, []() {
         led.update();
         }, &mainScheduler, true);
+    taskUpdateLed->setSchedulingOption(TASK_INTERVAL);
 
     taskButtonCheck = new Task(10, TASK_FOREVER, []() {
         button.tick();
         }, &mainScheduler, true);
+    taskButtonCheck->setSchedulingOption(TASK_INTERVAL);
 
     taskConnectToMqtt = new Task(2000, TASK_FOREVER, []() {
+        led.blink(3, 300, 5000);
         if (isWifiInetConnected()) {
             if (isInternetWifiInetConnected()) {
                 Serial.println("WiFi INET is connected. Connecting to MQTT Broker...");
@@ -213,15 +217,19 @@ void setupTask() {
 
         String clientID = "ESPClient-";
         clientID += String(random(0xffff), HEX);
+        mqttClient->setSocketTimeout(2);
         if (mqttClient && mqttClient->connect(clientID.c_str(), TLS_MQTT_USERNAME, TLS_MQTT_PASSWORD)) {
             Serial.println("Connected to MQTT Broker!");
             mqttClient->subscribe(MQTT_TOPIC_RECEIVE);
             taskConnectToMqtt->disable();
             taskLoopConnection->enable();
         }
+        mqttClient->setSocketTimeout(MQTT_SOCKET_TIMEOUT_OVERRIDE);
         }, &mainScheduler, false);
+    taskConnectToMqtt->setSchedulingOption(TASK_INTERVAL);
 
     taskConnectWiFi = new Task(200, TASK_FOREVER, []() {
+        led.blink(2, 300, 5000);
         if (WiFi.status() == WL_CONNECTED) {
             Serial.println("Connected to WiFi!");
             Serial.print("IP address: ");
@@ -229,7 +237,6 @@ void setupTask() {
             Serial.print("Signal strength (RSSI): ");
             Serial.print(WiFi.RSSI());
             Serial.println(" dBm");
-            led.blink(3, 50, 3000);
 
             if (isWifiInetConnected()) {
                 Serial.println("Connected to WiFi INET. Starting login loop...");
@@ -244,8 +251,9 @@ void setupTask() {
             taskConnectWiFi->disable();
         }
         }, &mainScheduler, false);
+    taskConnectWiFi->setSchedulingOption(TASK_INTERVAL);
 
-    taskLoopConnection = new Task(10, TASK_FOREVER, []() {
+    taskLoopConnection = new Task(5, TASK_FOREVER, []() {
         if (websocket) {
             websocket->loop();
         }
@@ -256,14 +264,18 @@ void setupTask() {
                 taskConnectToMqtt->enable();
                 taskLoopConnection->disable();
             }
+            else {
+                led.blink(1000);
+            }
         }
         }, &mainScheduler, false);
+    taskLoopConnection->setSchedulingOption(TASK_INTERVAL);
 
     taskRequestWifiInet = new Task(100, TASK_FOREVER, []() {
         loopWifiInetLogin();
         }, &mainScheduler, false);
+    taskRequestWifiInet->setSchedulingOption(TASK_INTERVAL);
 }
-
 
 void setupWebSocket() {
     Serial.println("Setting up WebSocket server...");
@@ -362,6 +374,21 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         Serial.println(error.f_str());
         return;
     }
+
+    // List of supported commands:
+    /* 
+        sprayNow
+        addTaskSpray
+        removeTaskSpray
+        setTaskEnabled
+        editTaskSpray
+        getTime
+        getAllTaskSpray
+        setTime
+        getHomeData
+        setWiFiConfig
+        getEspInfo
+    */
 
     String command = doc["command"] | "";
     if (command == "") {
@@ -768,6 +795,14 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         if (ssid.length() < 1) {
             ssid = wifiConfig.ssid;
             password = wifiConfig.password;
+        }
+
+        if(wifiConfig.mode == mode && wifiConfig.ssidAp == ssidAp && wifiConfig.passwordAp == passwordAp &&
+           wifiConfig.ssid == ssid && wifiConfig.password == password) {
+            Serial.println("WiFi configuration is the same as the current one. No changes made.");
+            String responseStr = "{\"command\":\"setWiFiConfigResponse\",\"status\":true,\"message\":\"WiFi configuration is the same as the current one. No changes needed.\"}";
+            sendMessage(num, responseStr);
+            return;
         }
 
         wifiConfig.ssidAp = ssidAp;
