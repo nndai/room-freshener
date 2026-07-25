@@ -108,26 +108,10 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="12dp"
-                        android:text="Thời gian mỗi lần xịt"
+                        android:text="Thời gian nút cứng trên ESP"
                         android:textColor="#5F6368"
                         android:textSize="14sp"
                         android:textStyle="bold" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/inputAppDurationLayout"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="12dp"
-                        android:hint="Nút xịt trên App (giây)">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etAppDuration"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:importantForAutofill="no"
-                            android:inputType="number" />
-                    </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/inputHwDurationLayout"

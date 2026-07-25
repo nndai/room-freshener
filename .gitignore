@@ -1,10 +1,6 @@
 .pio
 .vscode/
 
-lib/**
-!lib/*/
-!lib/*/library.properties
-
 
 /app-android/.idea/
 /app-android/*.iml

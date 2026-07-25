@@ -27,6 +27,7 @@ struct SystemConfig {
 #define BUTTON_PIN 14
 #define I2C_SDA_PIN 4
 #define I2C_SCL_PIN 5
+#define DHT11_PIN 13
 
 #define PATH_FOLDER_DATA "/datas/"
 #define PATH_FOLDER_LOG "/logs/"

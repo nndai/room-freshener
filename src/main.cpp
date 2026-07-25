@@ -16,6 +16,7 @@
 #include "RequestWifiInet.h"
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include <DHT.h>
 
 SystemConfig systemConfig = {
     WEBSOCKET,
@@ -42,6 +43,10 @@ SprayScheduler sprayScheduler(&sprayController, &rtc, PATH_FILENAME_SPRAY_TASKS)
 LedController led(LED_PIN, true);
 OneButton button(BUTTON_PIN, true);
 
+DHT dht(DHT11_PIN, DHT11);
+float latestTemperature = 0;
+float latestHumidity = 0;
+
 Scheduler mainScheduler;
 
 //======================== Prototypes ========================
@@ -66,17 +71,20 @@ Task* taskConnectToMqtt;
 Task* taskConnectWiFi;
 Task* taskLoopConnection;
 Task* taskRequestWifiInet;
+Task* taskReadDHT11;
+Task* taskNtpSync;
 
 
 //========================= Setup & Loop ======================
 void setup() {
-    led.off();
+    led.on();
     Serial.begin(74880);
     delay(100);
-    printEspInfo();
 
     LittleFS.begin();
-    //LittleFS.format(); // Uncomment this line to format LittleFS on first run
+    // LittleFS.format(); // Uncomment this line to format LittleFS on first run
+
+    printEspInfo();
 
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
     if (!rtc.begin(&Wire)) {
@@ -86,6 +94,7 @@ void setup() {
         Serial.println("RTC is NOT running");
     }
 
+    dht.begin();
     setupButton();
     setupTask();
     loadSystemConfig(systemConfig);
@@ -134,6 +143,13 @@ String getEspInfo() {
     info += "Flash Real Size: " + String(ESP.getFlashChipRealSize() / 1024) + " KB\n";
     info += "Flash Chip Speed: " + String(ESP.getFlashChipSpeed() / 1000000) + " MHz\n";
     info += "Flash Mode: " + String(ESP.getFlashChipMode()) + "\n";
+    info += "Flash Vendor ID: 0x" + String(ESP.getFlashChipVendorId(), HEX) + "\n";
+
+    FSInfo fs_info;
+    if (LittleFS.info(fs_info)) {
+        info += "LittleFS Total Space: " + String(fs_info.totalBytes / 1024) + " KB\n";
+        info += "LittleFS Used Space: " + String(fs_info.usedBytes / 1024) + " KB\n";
+    }
 
     info += "Free Heap: " + String(ESP.getFreeHeap()) + " bytes\n";
     info += "Heap Fragmentation: " + String(ESP.getHeapFragmentation()) + "%\n";
@@ -163,34 +179,26 @@ void printEspInfo() {
 void setupTask() {
     Serial.println("Setting up tasks...");
     taskUpdateSprayScheduler = new Task(2000, TASK_FOREVER, []() {
-        if (!rtc.isrunning()) {
-            if ((isWifiInetConnected() && isInternetWifiInetConnected()) ||
-                (!isWifiInetConnected() && WiFi.status() == WL_CONNECTED && WiFi.getMode() != WIFI_AP)) {
-
-                if (!ntpClient) {
-                    ntpUDP = new WiFiUDP();
-                    ntpClient = new NTPClient(*ntpUDP);
-                }
-                else {
-                    ntpClient->end();
-                }
-                ntpClient->begin();
-                ntpClient->forceUpdate();
-                delay(1000);
-                if (ntpClient->forceUpdate()) {
-                    Serial.println("RTC synchronized via NTP.");
-                    DateTime dt = DateTime(ntpClient->getEpochTime() + 1);
-                    rtc.adjust(dt);
-                    dt = CONVERT_TO_LOCAL_TIME(dt);
-                    Serial.printf("Set RTC current time: %04d-%02d-%02d %02d:%02d:%02d\n",
-                        dt.year(), dt.month(), dt.day(),
-                        dt.hour(), dt.minute(), dt.second());
-                }
-            }
-        }
         sprayScheduler.update();
         }, &mainScheduler, true);
     taskUpdateSprayScheduler->setSchedulingOption(TASK_INTERVAL);
+
+    taskNtpSync = new Task(61000, TASK_FOREVER, []() {
+        bool wifiOk = (isWifiInetConnected() && isInternetWifiInetConnected()) ||
+                      (!isWifiInetConnected() && WiFi.status() == WL_CONNECTED && WiFi.getMode() != WIFI_AP);
+        if (!wifiOk) return;
+
+        if (!ntpClient) {
+            ntpUDP = new WiFiUDP();
+            ntpClient = new NTPClient(*ntpUDP);
+            ntpClient->begin();
+        }
+        if (ntpClient->update()) {
+            DateTime dt = DateTime(ntpClient->getEpochTime() + 1);
+            rtc.adjust(dt);
+        }
+        }, &mainScheduler, true);
+    taskNtpSync->setSchedulingOption(TASK_INTERVAL);
 
     taskSprayControllerUpdate = new Task(500, TASK_FOREVER, []() {
         sprayController.update();
@@ -206,6 +214,16 @@ void setupTask() {
         button.tick();
         }, &mainScheduler, true);
     taskButtonCheck->setSchedulingOption(TASK_INTERVAL);
+
+    taskReadDHT11 = new Task(2000, TASK_FOREVER, []() {
+        float h = dht.readHumidity();
+        float t = dht.readTemperature();
+        if (!isnan(h) && !isnan(t)) {
+            latestHumidity = h;
+            latestTemperature = t - 2.7f; // Adjust temperature reading by subtracting 2.2 degrees
+        }
+        }, &mainScheduler, true);
+    taskReadDHT11->setSchedulingOption(TASK_INTERVAL);
 
     taskConnectToMqtt = new Task(2000, TASK_FOREVER, []() {
         led.blink(3, 300, 5000);
@@ -282,19 +300,27 @@ void setupTask() {
 }
 
 void setupButton() {
+    button.setPressMs(10000);
     button.attachClick([]() {
         Serial.println("Button clicked!");
+        if (sprayController.isActive()) {
+            sprayController.off();
+            Serial.println("Spray stopped by hardware button.");
+            return;
+        }
+
         sprayScheduler.sprayNow(systemConfig.hwButtonDurationMs, SPRAY_REASON_MANUAL_HARDWARE);
         });
-    
+
     button.attachLongPressStart([]() {
+        Serial.println("Button long pressed!");
         handleButtonLongPress();
         });
 }
 
 void handleButtonLongPress() {
     led.off();
-    while(digitalRead(BUTTON_PIN) == LOW) {
+    while (digitalRead(BUTTON_PIN) == LOW) {
         led.on();
         delay(200);
         led.off();
@@ -404,8 +430,9 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
     }
 
     // List of supported commands:
-    /* 
+    /*
         sprayNow
+        stopSpray
         addTaskSpray
         removeTaskSpray
         setTaskEnabled
@@ -450,6 +477,39 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         responseDoc["command"] = "sprayNowResponse";
         responseDoc["status"] = true;
         responseDoc["message"] = "success.";
+        String jsonStr;
+        serializeJson(responseDoc, jsonStr);
+        sendMessage(num, jsonStr);
+    }
+
+    /**
+     * Xử lý lệnh tắt phun sương ngay lập tức
+     * example:
+     * received JSON:
+     * {
+     *   "command": "stopSpray"
+     * }
+     *
+     * response JSON:
+     * {
+     *  "command": "stopSprayResponse",
+     *  "status": 1,
+     *  "wasActive": true,
+     *  "message": "success."
+     * }
+     */
+    else if (command == "stopSpray") {
+        bool wasActive = sprayController.isActive();
+        if (wasActive) {
+            sprayController.off();
+        }
+
+        JsonDocument responseDoc;
+        responseDoc["command"] = "stopSprayResponse";
+        responseDoc["status"] = true;
+        responseDoc["wasActive"] = wasActive;
+        responseDoc["message"] = wasActive ? "success." : "Spray already stopped.";
+
         String jsonStr;
         serializeJson(responseDoc, jsonStr);
         sendMessage(num, jsonStr);
@@ -757,8 +817,8 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
     else if (command == "getHomeData") {
         JsonDocument responseDoc;
         responseDoc["command"] = "getHomeDataResponse";
-        responseDoc["temperature"] = 29.3; //TODO
-        responseDoc["humidity"] = 75.5; //TODO
+        responseDoc["temperature"] = latestTemperature;
+        responseDoc["humidity"] = latestHumidity;
 
         SprayInfo lastSprayInfo = sprayScheduler.getLastSprayInfo();
         responseDoc["lastSprayHourTime"] = lastSprayInfo.timestamp.hour();
@@ -774,6 +834,7 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         SprayController::SprayDataTotal sprayDataTotal = sprayController.getSprayDataTotal();
         responseDoc["totalSprayCount"] = sprayDataTotal.totalSpraysCount;
         responseDoc["totalSprayDuration"] = sprayDataTotal.totalSprayDuration;
+        responseDoc["sprayActive"] = sprayController.isActive();
 
         String jsonStr;
         serializeJson(responseDoc, jsonStr);
@@ -827,8 +888,8 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
             password = systemConfig.password;
         }
 
-        if(systemConfig.mode == mode && systemConfig.ssidAp == ssidAp && systemConfig.passwordAp == passwordAp &&
-           systemConfig.ssid == ssid && systemConfig.password == password) {
+        if (systemConfig.mode == mode && systemConfig.ssidAp == ssidAp && systemConfig.passwordAp == passwordAp &&
+            systemConfig.ssid == ssid && systemConfig.password == password) {
             Serial.println("WiFi configuration is the same as the current one. No changes made.");
             String responseStr = "{\"command\":\"setWiFiConfigResponse\",\"status\":true,\"message\":\"WiFi configuration is the same as the current one. No changes needed.\"}";
             sendMessage(num, responseStr);
@@ -893,7 +954,8 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         if (LittleFS.info(fs_info)) {
             responseDoc["fsTotalBytes"] = fs_info.totalBytes;
             responseDoc["fsUsedBytes"] = fs_info.usedBytes;
-        } else {
+        }
+        else {
             responseDoc["fsTotalBytes"] = 0;
             responseDoc["fsUsedBytes"] = 0;
         }
@@ -964,17 +1026,17 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
      */
     else if (command == "getLogFiles") {
         std::vector<SprayController::LogFileInfo> files = sprayController.collectLogFiles();
-        
+
         JsonDocument responseDoc;
         responseDoc["command"] = "getLogFilesResponse";
         JsonArray filesArray = responseDoc["files"].to<JsonArray>();
-        
+
         for (const auto& info : files) {
             JsonObject fileObj = filesArray.add<JsonObject>();
             fileObj["name"] = info.path;
             fileObj["size"] = info.size;
         }
-        
+
         String jsonStr;
         serializeJson(responseDoc, jsonStr);
         sendMessage(num, jsonStr);
@@ -993,23 +1055,23 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
     else if (command == "readLogFile") {
         String name = doc["name"] | "";
         uint32_t offset = doc["offset"] | 0;
-        
+
         if (name == "") {
             String responseStr = "{\"command\":\"readLogFileResponse\",\"status\":false,\"message\":\"Missing file name.\"}";
             sendMessage(num, responseStr);
             return;
         }
-        
+
         bool isEOF = false;
         String data = sprayController.readLogChunk(name, offset, 512, isEOF);
-        
+
         JsonDocument responseDoc;
         responseDoc["command"] = "readLogFileResponse";
         responseDoc["name"] = name;
         responseDoc["offset"] = offset + data.length();
         responseDoc["data"] = data;
         responseDoc["isEOF"] = isEOF;
-        
+
         String jsonStr;
         serializeJson(responseDoc, jsonStr);
         sendMessage(num, jsonStr);
@@ -1018,7 +1080,7 @@ void handleMessage(uint8_t num, uint8_t* payload, uint32_t length) {
         uint32_t duration = doc["hwButtonDurationMs"] | 1000;
         systemConfig.hwButtonDurationMs = duration;
         saveSystemConfig(systemConfig);
-        
+
         Serial.printf("System settings updated: HW button duration = %u ms\n", duration);
 
         JsonDocument responseDoc;

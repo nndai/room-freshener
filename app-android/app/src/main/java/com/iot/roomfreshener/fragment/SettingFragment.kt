@@ -40,7 +40,6 @@ class SettingFragment : Fragment() {
     private lateinit var etPasswordAp: TextInputEditText
     private lateinit var etSsid: TextInputEditText
     private lateinit var etPassword: TextInputEditText
-    private lateinit var etAppDuration: TextInputEditText
     private lateinit var etHwDuration: TextInputEditText
     private lateinit var btnSubmitDurations: MaterialButton
     private lateinit var inputModeLayout: TextInputLayout
@@ -64,9 +63,6 @@ class SettingFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         bindViews(view)
         setupModeDropdown()
-        
-        val currentAppMs = viewModel.getAppButtonDurationMs()
-        etAppDuration.setText((currentAppMs / 1000).toString())
 
         observeState()
         bindInteractions()
@@ -81,7 +77,6 @@ class SettingFragment : Fragment() {
         etPasswordAp = root.findViewById(R.id.etPasswordAp)
         etSsid = root.findViewById(R.id.etSsid)
         etPassword = root.findViewById(R.id.etPassword)
-        etAppDuration = root.findViewById(R.id.etAppDuration)
         etHwDuration = root.findViewById(R.id.etHwDuration)
         btnSubmitDurations = root.findViewById(R.id.btnSubmitDurations)
         inputModeLayout = root.findViewById(R.id.inputModeLayout)
@@ -105,10 +100,9 @@ class SettingFragment : Fragment() {
             submitConfig()
         }
         btnSubmitDurations.setOnClickListener {
-            val appVal = etAppDuration.text?.toString()?.toLongOrNull()
             val hwVal = etHwDuration.text?.toString()?.toLongOrNull()
-            if (appVal != null && hwVal != null) {
-                viewModel.submitSystemSettings(appVal, hwVal)
+            if (hwVal != null) {
+                viewModel.submitSystemSettings(hwVal)
             } else {
                 Snackbar.make(requireView(), "Vui lòng nhập thời gian hợp lệ", Snackbar.LENGTH_SHORT).show()
             }

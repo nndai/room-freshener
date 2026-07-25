@@ -168,6 +168,15 @@ class DeviceCommandDataSource(
         )
     }
 
+    suspend fun stopSpray() {
+        Log.d(TAG, "stopSpray()")
+        sendJson(
+            JSONObject().apply {
+                put("command", "stopSpray")
+            }
+        )
+    }
+
     suspend fun setSystemSettings(hwButtonDurationMs: Long) {
         Log.d(TAG, "setSystemSettings duration=$hwButtonDurationMs")
         sendJson(
@@ -226,6 +235,7 @@ class DeviceCommandDataSource(
                 "setTaskEnabledResponse",
                 "setTimeResponse",
                 "sprayNowResponse",
+                "stopSprayResponse",
                 "setWiFiConfigResponse",
                 "setSystemSettingsResponse" -> emitCommandResult(command, json)
                 else -> Unit
@@ -415,7 +425,8 @@ class DeviceCommandDataSource(
             lastSpray = last,
             nextSpray = next,
             totalSprayCount = json.optLong("totalSprayCount", 0L),
-            totalSprayDuration = json.optLong("totalSprayDuration", 0L)
+            totalSprayDuration = json.optLong("totalSprayDuration", 0L),
+            sprayActive = json.optBoolean("sprayActive", false)
         )
     }
 

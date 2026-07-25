@@ -65,15 +65,7 @@ class SettingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun getAppButtonDurationMs(): Long {
-        val prefs = getApplication<Application>().getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
-        return prefs.getLong("app_button_duration_ms", 1000L)
-    }
-
-    fun submitSystemSettings(appDurationSec: Long, hwDurationSec: Long) {
-        val prefs = getApplication<Application>().getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putLong("app_button_duration_ms", appDurationSec * 1000L).apply()
-
+    fun submitSystemSettings(hwDurationSec: Long) {
         viewModelScope.launch {
             _isProcessing.value = true
             repository.setSystemSettings(hwDurationSec * 1000L)

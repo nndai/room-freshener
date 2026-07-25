@@ -134,6 +134,11 @@ class DeviceControlRepository(
         remote.sprayNow(durationMs)
     }
 
+    suspend fun stopSpray() {
+        Log.d(TAG, "stopSpray()")
+        remote.stopSpray()
+    }
+
     suspend fun refreshHome() {
         Log.d(TAG, "refreshHome()")
         remote.requestHomeData()

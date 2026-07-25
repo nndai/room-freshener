@@ -1,6 +1,7 @@
 package com.iot.roomfreshener.ui.home
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.iot.roomfreshener.data.di.DeviceRepositoryProvider
@@ -41,6 +42,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 2)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
+    private val prefs = getApplication<Application>()
+        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val _sprayDurationMs = MutableStateFlow(
+        prefs.getLong(PREF_APP_BUTTON_DURATION_MS, DEFAULT_SPRAY_DURATION_MS)
+    )
+    val sprayDurationMs: StateFlow<Long> = _sprayDurationMs.asStateFlow()
+
     init {
         viewModelScope.launch {
             repository.commandEvents.collect { event ->
@@ -50,6 +59,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         _messages.tryEmit(event.message ?: "Lệnh xịt thất bại.")
                     } else {
                         _messages.tryEmit("Đã gửi lệnh xịt thành công.")
+                        refreshHome()
+                    }
+                } else if (event.command == "stopSprayResponse") {
+                    _isProcessing.value = false
+                    if (!event.success) {
+                        _messages.tryEmit(event.message ?: "Không thể tắt spray.")
+                    } else {
+                        _messages.tryEmit(event.message ?: "Đã gửi lệnh tắt spray.")
                         refreshHome()
                     }
                 } else if (event.command == "getHomeDataResponse") {
@@ -70,8 +87,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun sprayNow() {
-        val prefs = getApplication<Application>().getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
-        val durationMs = prefs.getLong("app_button_duration_ms", DEFAULT_SPRAY_DURATION_MS)
+        val durationMs = _sprayDurationMs.value
         viewModelScope.launch {
             _isProcessing.value = true
             runCatching { repository.sprayNow(durationMs) }
@@ -82,7 +98,30 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun stopSpray() {
+        viewModelScope.launch {
+            _isProcessing.value = true
+            runCatching { repository.stopSpray() }
+                .onFailure {
+                    _isProcessing.value = false
+                    _messages.tryEmit("Không thể gửi lệnh tắt spray.")
+                }
+        }
+    }
+
+    fun setSprayDurationSeconds(seconds: Long) {
+        val clampedSeconds = seconds.coerceIn(MIN_DURATION_SECONDS, MAX_DURATION_SECONDS)
+        val durationMs = clampedSeconds * 1000L
+        prefs.edit().putLong(PREF_APP_BUTTON_DURATION_MS, durationMs).apply()
+        _sprayDurationMs.value = durationMs
+        _messages.tryEmit("Đã cập nhật thời gian phun: ${clampedSeconds}s")
+    }
+
     companion object {
+        private const val PREFS_NAME = "app_settings"
+        private const val PREF_APP_BUTTON_DURATION_MS = "app_button_duration_ms"
         private const val DEFAULT_SPRAY_DURATION_MS = 1_000L
+        private const val MIN_DURATION_SECONDS = 1L
+        private const val MAX_DURATION_SECONDS = 4000000000L
     }
 }

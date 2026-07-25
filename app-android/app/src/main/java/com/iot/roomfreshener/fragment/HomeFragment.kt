@@ -1,6 +1,8 @@
 package com.iot.roomfreshener.fragment
 
+import android.annotation.SuppressLint
 import android.os.Bundle
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -11,10 +13,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.iot.roomfreshener.R
 import com.iot.roomfreshener.data.model.HomeSnapshot
 import com.google.android.material.snackbar.Snackbar
 import com.iot.roomfreshener.data.model.SprayMoment
+import com.google.android.material.textfield.TextInputEditText
 import com.iot.roomfreshener.ui.home.HomeViewModel
 import java.time.Duration
 import java.time.LocalTime
@@ -36,7 +40,10 @@ class HomeFragment : Fragment() {
     private lateinit var tvSprayMode: TextView
     private lateinit var tvTotalSprays: TextView
     private lateinit var tvCyclesPerDay: TextView
+    private lateinit var tvSprayActiveStatus: TextView
     private lateinit var btnSprayNow: MaterialButton
+    private lateinit var btnStopSpray: MaterialButton
+    private lateinit var btnSprayMode: MaterialButton
     private lateinit var overlayLoading: View
     private lateinit var tvLatency: TextView
 
@@ -51,6 +58,8 @@ class HomeFragment : Fragment() {
         bindViews(view)
         observeUi()
         btnSprayNow.setOnClickListener { viewModel.sprayNow() }
+        btnStopSpray.setOnClickListener { viewModel.stopSpray() }
+        btnSprayMode.setOnClickListener { showDurationDialog() }
     }
 
     private fun bindViews(root: View) {
@@ -63,7 +72,10 @@ class HomeFragment : Fragment() {
         tvSprayMode = root.findViewById(R.id.tvSprayMode)
         tvTotalSprays = root.findViewById(R.id.tvTotalSprays)
         tvCyclesPerDay = root.findViewById(R.id.tvCyclesPerDay)
+        tvSprayActiveStatus = root.findViewById(R.id.tvSprayActiveStatus)
         btnSprayNow = root.findViewById(R.id.btnSprayNow)
+        btnStopSpray = root.findViewById(R.id.btnStopSpray)
+        btnSprayMode = root.findViewById(R.id.btnSprayMode)
         overlayLoading = root.findViewById(R.id.overlayLoading)
         tvLatency = root.findViewById(R.id.tvLatency)
     }
@@ -99,6 +111,12 @@ class HomeFragment : Fragment() {
                     }
                 }
                 launch {
+                    viewModel.sprayDurationMs.collect { durationMs ->
+                        val seconds = durationMs / 1000L
+                        btnSprayMode.text = "Chế độ\n${seconds}s"
+                    }
+                }
+                launch {
                     while (isActive) {
                         viewModel.refreshHome()
                         delay(REQUEST_INTERVAL_MS)
@@ -122,6 +140,24 @@ class HomeFragment : Fragment() {
         tvNextSprayCountdown.text = next?.let { formatCountdown(it) } ?: "--"
 
         tvTotalSprays.text = snapshot?.totalSprayCount?.toString() ?: "--"
+        renderSprayActive(snapshot?.sprayActive)
+    }
+
+    private fun renderSprayActive(isActive: Boolean?) {
+        when (isActive) {
+            true -> {
+                tvSprayActiveStatus.text = "ĐANG BẬT"
+                tvSprayActiveStatus.setTextColor(resources.getColor(android.R.color.holo_green_dark, null))
+            }
+            false -> {
+                tvSprayActiveStatus.text = "ĐANG TẮT"
+                tvSprayActiveStatus.setTextColor(resources.getColor(android.R.color.holo_red_dark, null))
+            }
+            null -> {
+                tvSprayActiveStatus.text = "--"
+                tvSprayActiveStatus.setTextColor(resources.getColor(android.R.color.darker_gray, null))
+            }
+        }
     }
 
     private fun formatTemperature(value: Double): String {
@@ -175,6 +211,31 @@ class HomeFragment : Fragment() {
             2 -> "App Button"
             else -> "Other"
         }
+    }
+
+    @SuppressLint("RestrictedApi")
+    private fun showDurationDialog() {
+        val input = TextInputEditText(requireContext()).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            hint = "Nhập giây (1-4tỷ)"
+            setText((viewModel.sprayDurationMs.value / 1000L).toString())
+            setSelection(text?.length ?: 0)
+        }
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Chế độ thời gian phun")
+            .setMessage("Thiết lập thời gian cho nút bật phun sương")
+            .setView(input, 50, 20, 50, 0)
+            .setNegativeButton("Hủy", null)
+            .setPositiveButton("Lưu") { _, _ ->
+                val seconds = input.text?.toString()?.trim()?.toLongOrNull()
+                if (seconds == null || seconds !in 1L..4000000000) {
+                    Snackbar.make(requireView(), "Vui lòng nhập số giây từ 1 đến 4 tỷ", Snackbar.LENGTH_SHORT).show()
+                } else {
+                    viewModel.setSprayDurationSeconds(seconds)
+                }
+            }
+            .show()
     }
 
     companion object {

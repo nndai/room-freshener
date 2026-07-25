@@ -9,7 +9,8 @@ data class HomeSnapshot(
     val lastSpray: SprayMoment? = null,
     val nextSpray: SprayMoment? = null,
     val totalSprayCount: Long = 0,
-    val totalSprayDuration: Long = 0
+    val totalSprayDuration: Long = 0,
+    val sprayActive: Boolean = false
 )
 
 /**
