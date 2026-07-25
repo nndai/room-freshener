@@ -220,7 +220,7 @@ void setupTask() {
         float t = dht.readTemperature();
         if (!isnan(h) && !isnan(t)) {
             latestHumidity = h;
-            latestTemperature = t - 2.7f; // Adjust temperature reading by subtracting 2.2 degrees
+            latestTemperature = t - 1.7f; // Adjust temperature reading by subtracting 2.2 degrees
         }
         }, &mainScheduler, true);
     taskReadDHT11->setSchedulingOption(TASK_INTERVAL);
